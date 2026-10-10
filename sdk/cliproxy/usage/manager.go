@@ -34,11 +34,15 @@ type Record struct {
 	LatencyMs             int64
 	FirstTokenMs          int64
 	Failed                bool
-	APIIdentifier         string
-	RequestID             string
-	ResponseStatus        int
-	Streaming             bool
-	Detail                Detail
+	// ProviderAttempts includes a bounded compatibility retry inside an executor.
+	// Zero means one attempt for older publishers.
+	ProviderAttempts     int64
+	APIIdentifier        string
+	RequestID            string
+	RequestCorrelationID string
+	ResponseStatus       int
+	Streaming            bool
+	Detail               Detail
 
 	// TrustedTenantID is set only by authenticated internal execution paths.
 	// When empty, persistence resolves the tenant from the real API key.

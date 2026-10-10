@@ -85,6 +85,7 @@ func (r UpstreamRecorder) RecordResponseError(err error) {
 }
 
 func (r UpstreamRecorder) AppendResponseChunk(chunk []byte) {
+	observeReasoningOrigins(r.ctx, r.cfg, r.provider, chunk)
 	appendAPIResponseChunk(r.ctx, r.cfg, chunk)
 }
 
@@ -243,6 +244,7 @@ func (ec *ExecutionContext) TranslateRequestPair(payload []byte) ([]byte, []byte
 	if payload == nil {
 		payload = ec.Request.Payload
 	}
+	payload = stripForeignReasoningState(ec.Context, ec.Config, ec.Provider, payload)
 	translated := sdktranslator.TranslateRequest(
 		ec.SourceFormat,
 		ec.Execution.TargetFormat,
@@ -262,7 +264,7 @@ func (ec *ExecutionContext) TranslateRequestPair(payload []byte) ([]byte, []byte
 		ec.SourceFormat,
 		ec.Execution.TargetFormat,
 		ec.BaseModel,
-		ec.OriginalPayload,
+		stripForeignReasoningState(ec.Context, ec.Config, ec.Provider, ec.OriginalPayload),
 		ec.Execution.TranslateAsStream,
 	)
 	return translated, originalTranslated

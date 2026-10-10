@@ -72,6 +72,17 @@ func usageRequestMetadata(ctx context.Context) (identifier, requestID string, re
 	return identifier, requestID, responseStatus
 }
 
+func usageRequestCorrelationID(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	ginCtx, _ := ctx.Value(util.ContextKeyGin).(*gin.Context)
+	if identity := logging.GetGinRequestCorrelationID(ginCtx); identity != "" {
+		return identity
+	}
+	return logging.GetRequestID(ctx)
+}
+
 func buildRequestDetailContent(ctx context.Context, includeBodies ...bool) string {
 	if ctx == nil {
 		return ""

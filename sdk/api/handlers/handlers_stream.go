@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	"net/http"
 
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
@@ -238,6 +239,9 @@ func sendStreamData(ctx context.Context, dataChan chan<- []byte, chunk []byte) b
 }
 
 func bootstrapEligibleStreamErr(err error) bool {
+	if util.IsUpstreamRequestBufferLimit(err) {
+		return false
+	}
 	status := statusFromError(err)
 	if status == 0 {
 		return true

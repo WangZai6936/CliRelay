@@ -22,24 +22,27 @@ import (
 const usageReporterOutputMemoryLimit = 256 * 1024
 
 type usageReporter struct {
-	provider            string
-	model               string
-	thinkingLevel       string
-	upstreamModel       string
-	visionFallbackModel string
-	authID              string
-	authIndex           string
-	authSubjectID       string
-	apiKey              string
-	trustedTenantID     string
-	apiKeyID            string
-	apiKeyName          string
-	source              string
-	channelName         string
-	requestedAt         time.Time
-	once                sync.Once
-	contentMu           sync.Mutex
-	captureFullContent  bool
+	provider             string
+	model                string
+	thinkingLevel        string
+	upstreamModel        string
+	visionFallbackModel  string
+	authID               string
+	authIndex            string
+	authSubjectID        string
+	apiKey               string
+	trustedTenantID      string
+	apiKeyID             string
+	apiKeyName           string
+	source               string
+	channelName          string
+	requestedAt          time.Time
+	once                 sync.Once
+	published            atomic.Bool
+	providerAttempts     atomic.Int64
+	cancellationReported atomic.Bool
+	contentMu            sync.Mutex
+	captureFullContent   bool
 	// streamingRequest records what the client asked for, so it is fixed at
 	// construction from the client payload and never revised afterwards.
 	//
@@ -270,6 +273,10 @@ func (r *usageReporter) appendOutputChunk(chunk []byte) {
 }
 
 func (r *usageReporter) publishFailure(ctx context.Context) {
+	if ctx != nil && ctx.Err() != nil {
+		r.recordCancellation(ctx)
+		return
+	}
 	r.publishWithOutcome(ctx, coreusage.Detail{}, true)
 }
 
@@ -285,6 +292,7 @@ func (r *usageReporter) publishFailureWithContentBytes(ctx context.Context, inpu
 		return
 	}
 	if shouldSuppressUsageFailure(nil, outputContent) {
+		r.recordCancellation(ctx)
 		return
 	}
 	r.contentMu.Lock()
@@ -304,6 +312,8 @@ func (r *usageReporter) trackFailure(ctx context.Context, errPtr *error) {
 	}
 	if *errPtr != nil {
 		if shouldSuppressUsageFailure(*errPtr, "") {
+			r.recordCancellation(ctx)
+			r.discardUnpublishedContent()
 			return
 		}
 		r.contentMu.Lock()
@@ -317,6 +327,14 @@ func (r *usageReporter) trackFailure(ctx context.Context, errPtr *error) {
 		r.contentMu.Unlock()
 		r.publishFailure(ctx)
 	}
+}
+
+func (r *usageReporter) recordCancellation(ctx context.Context) {
+	if r == nil || r.published.Load() || !r.cancellationReported.CompareAndSwap(false, true) {
+		return
+	}
+	identifier, requestID, _ := usageRequestMetadata(ctx)
+	internalusage.RecordRequestCancellation(ctx, coreusage.Record{APIKey: r.apiKey, TrustedTenantID: r.trustedTenantID, APIIdentifier: identifier, RequestID: requestID, RequestCorrelationID: usageRequestCorrelationID(ctx), Model: r.model, RequestedAt: r.requestedAt})
 }
 
 func shouldSuppressUsageFailure(err error, outputContent string) bool {
@@ -381,6 +399,7 @@ func (r *usageReporter) publishWithOutcome(ctx context.Context, detail coreusage
 		return
 	}
 	r.once.Do(func() {
+		r.published.Store(true)
 		inputContent, outputContent, inputPath, outputPath := r.finalizeContentForOutcome(failed)
 		detailContent, detailPath := deferLargeContent("cliproxy-usage-detail-*", buildRequestDetailContent(ctx, r.captureFullContent))
 		latencyMs := time.Since(r.requestedAt).Milliseconds()
@@ -409,8 +428,10 @@ func (r *usageReporter) publishWithOutcome(ctx context.Context, detail coreusage
 			LatencyMs:             latencyMs,
 			FirstTokenMs:          firstTokenMs,
 			Failed:                failed,
+			ProviderAttempts:      r.providerAttempts.Load(),
 			APIIdentifier:         apiIdentifier,
 			RequestID:             requestID,
+			RequestCorrelationID:  usageRequestCorrelationID(ctx),
 			ResponseStatus:        responseStatus,
 			Streaming:             r.streamingRequest,
 			Detail:                detail,
@@ -433,6 +454,7 @@ func (r *usageReporter) ensurePublished(ctx context.Context) {
 		return
 	}
 	r.once.Do(func() {
+		r.published.Store(true)
 		inputContent, outputContent, inputPath, outputPath := r.finalizeContentForOutcome(false)
 		detailContent, detailPath := deferLargeContent("cliproxy-usage-detail-*", buildRequestDetailContent(ctx, r.captureFullContent))
 		latencyMs := time.Since(r.requestedAt).Milliseconds()
@@ -461,8 +483,10 @@ func (r *usageReporter) ensurePublished(ctx context.Context) {
 			LatencyMs:             latencyMs,
 			FirstTokenMs:          firstTokenMs,
 			Failed:                false,
+			ProviderAttempts:      r.providerAttempts.Load(),
 			APIIdentifier:         apiIdentifier,
 			RequestID:             requestID,
+			RequestCorrelationID:  usageRequestCorrelationID(ctx),
 			ResponseStatus:        responseStatus,
 			Streaming:             r.streamingRequest,
 			Detail:                coreusage.Detail{},
@@ -474,6 +498,31 @@ func (r *usageReporter) ensurePublished(ctx context.Context) {
 			DetailContentPath:     detailPath,
 		})
 	})
+}
+
+// discardUnpublishedContent releases files owned by a canceled stream. Once a
+// record is published, the usage queue owns these files and removes them itself.
+func (r *usageReporter) discardUnpublishedContent() {
+	if r == nil || r.published.Load() {
+		return
+	}
+	r.contentMu.Lock()
+	defer r.contentMu.Unlock()
+	if r.published.Load() {
+		return
+	}
+	if r.outputFile != nil {
+		_ = r.outputFile.Close()
+		r.outputFile = nil
+	}
+	for _, path := range []string{r.inputPath, r.outputPath} {
+		if path != "" {
+			_ = os.Remove(path)
+		}
+	}
+	r.inputPath, r.outputPath = "", ""
+	r.inputContent, r.outputContent = "", ""
+	r.outputBuilder.Reset()
 }
 
 func (r *usageReporter) spillOutputBuilderToFileLocked() error {

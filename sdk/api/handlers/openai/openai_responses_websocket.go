@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/interfaces"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	"github.com/router-for-me/CLIProxyAPI/v6/sdk/api/handlers"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
@@ -165,6 +166,10 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 		}
 
 		modelName := gjson.GetBytes(requestJSON, "model").String()
+		if target := h.Cfg.ResolveRequestModelAlias(modelName); target != modelName {
+			requestJSON, _ = sjson.SetBytes(requestJSON, "model", target)
+			modelName = target
+		}
 		// A turn reaches the executor and spends upstream quota just like a POST,
 		// so it passes the same quota checks, once per turn. They run before the
 		// model gate, as the quota middleware runs before model restriction on
@@ -194,6 +199,7 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 			}
 		}
 		completedOutput, errForward := func() ([]byte, error) {
+			logging.RenewGinRequestCorrelationID(c)
 			// Deferred so the slot comes back however the turn ends: completed,
 			// failed upstream, client gone, or a panic.
 			defer releaseQuota()

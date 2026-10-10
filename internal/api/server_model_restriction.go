@@ -20,6 +20,9 @@ import (
 
 func (s *Server) modelRestrictionMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		if !s.rewriteRequestModelAlias(c) {
+			return
+		}
 		switch c.Request.Method {
 		case http.MethodPost:
 		case http.MethodGet:
@@ -144,6 +147,9 @@ func (s *Server) buildModelGate(c *gin.Context) handlers.ModelGate {
 
 	return func(model string) *interfaces.ErrorMessage {
 		requestedModel := strings.TrimSpace(model)
+		if s.cfg != nil {
+			requestedModel = s.cfg.ResolveRequestModelAlias(requestedModel)
+		}
 		if requestedModel == "" {
 			return nil
 		}

@@ -221,6 +221,7 @@ func (e *XAIExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Auth
 	reporter.setInputContentBytes(req.Payload)
 	go func() {
 		defer close(out)
+		defer reporter.discardUnpublishedContent()
 		defer func() {
 			if errClose := httpResp.Body.Close(); errClose != nil {
 				log.Errorf("xai executor: close response body error: %v", errClose)
@@ -251,29 +252,41 @@ func (e *XAIExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Auth
 
 			chunks := sdktranslator.TranslateStream(execCtx.Context, execCtx.Execution.TargetFormat, execCtx.SourceFormat, req.Model, execCtx.OriginalPayload, body, bytes.Clone(line), &param)
 			for i := range chunks {
-				out <- cliproxyexecutor.StreamChunk{Payload: []byte(chunks[i])}
+				if !sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Payload: []byte(chunks[i])}) {
+					reporter.recordCancellation(execCtx.Context)
+					return
+				}
 			}
 			if terminalErr != nil {
 				recorder.RecordResponseError(terminalErr)
 				reporter.publishFailure(execCtx.Context)
-				out <- cliproxyexecutor.StreamChunk{Err: terminalErr}
+				sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Err: terminalErr})
 				return
 			}
-		}
-		if errScan := scanner.Err(); errScan != nil {
-			recorder.RecordResponseError(errScan)
-			reporter.publishFailure(execCtx.Context)
-			out <- cliproxyexecutor.StreamChunk{Err: errScan}
-			return
 		}
 		if completed {
 			reporter.ensurePublished(execCtx.Context)
 			return
 		}
+		if execCtx.Context.Err() != nil {
+			reporter.recordCancellation(execCtx.Context)
+			return
+		}
+		if errScan := scanner.Err(); errScan != nil {
+			if shouldSuppressUsageFailure(errScan, "") {
+				reporter.recordCancellation(execCtx.Context)
+				sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Err: errScan})
+				return
+			}
+			recorder.RecordResponseError(errScan)
+			reporter.publishFailure(execCtx.Context)
+			sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Err: errScan})
+			return
+		}
 		streamErr := newCodexResponsesIncompleteError()
 		recorder.RecordResponseError(streamErr)
 		reporter.publishFailure(execCtx.Context)
-		out <- cliproxyexecutor.StreamChunk{Err: streamErr}
+		sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Err: streamErr})
 	}()
 	return &cliproxyexecutor.StreamResult{Headers: httpResp.Header.Clone(), Chunks: out}, nil
 }

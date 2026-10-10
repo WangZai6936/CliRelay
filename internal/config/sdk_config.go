@@ -8,6 +8,9 @@ import "github.com/router-for-me/CLIProxyAPI/v6/internal/quota"
 
 // SDKConfig represents the application's configuration, loaded from a YAML file.
 type SDKConfig struct {
+	// RequestModelAliases rewrites legacy client model names before admission.
+	// Only the resolved target's catalog and API-key permissions grant access.
+	RequestModelAliases map[string]string `yaml:"request-model-aliases,omitempty" json:"request-model-aliases,omitempty"`
 	// ProxyURL is the URL of an optional proxy server to use for outbound requests.
 	ProxyURL string `yaml:"proxy-url" json:"proxy-url"`
 

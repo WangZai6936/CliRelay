@@ -14,6 +14,8 @@ type requestIDKey struct{}
 // ginRequestIDKey is the Gin context key for request IDs.
 const ginRequestIDKey = "__request_id__"
 
+const ginRequestCorrelationIDKey = "__request_correlation_id__"
+
 // GenerateRequestID creates a new 8-character hex request ID.
 func GenerateRequestID() string {
 	b := make([]byte, 4)
@@ -44,7 +46,33 @@ func GetRequestID(ctx context.Context) string {
 func SetGinRequestID(c *gin.Context, requestID string) {
 	if c != nil {
 		c.Set(ginRequestIDKey, requestID)
+		if _, exists := c.Get(ginRequestCorrelationIDKey); !exists {
+			RenewGinRequestCorrelationID(c)
+		}
 	}
+}
+
+// RenewGinRequestCorrelationID starts a separate logical turn on a persistent
+// WebSocket. The handshake's compact log ID remains unchanged.
+func RenewGinRequestCorrelationID(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	var random [16]byte
+	if _, err := rand.Read(random[:]); err == nil {
+		c.Set(ginRequestCorrelationIDKey, hex.EncodeToString(random[:]))
+	}
+}
+
+// GetGinRequestCorrelationID returns a private 128-bit request identity while
+// preserving the compact ID used in human-readable logs.
+func GetGinRequestCorrelationID(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	value, _ := c.Get(ginRequestCorrelationIDKey)
+	identity, _ := value.(string)
+	return identity
 }
 
 // GetGinRequestID retrieves the request ID from the Gin context.

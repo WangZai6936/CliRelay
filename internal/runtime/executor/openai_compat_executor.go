@@ -335,6 +335,7 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 	reporter.setInputContent(string(req.Payload))
 	go func() {
 		defer close(out)
+		defer reporter.discardUnpublishedContent()
 		defer func() {
 			if errClose := httpResp.Body.Close(); errClose != nil {
 				log.Errorf("openai compat executor: close response body error: %v", errClose)
@@ -345,6 +346,7 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 		var param any
 		var lastUsage coreusage.Detail
 		hasUsage := false
+		completed := false
 		var pendingResponsesCompleted []byte
 		for scanner.Scan() {
 			line := scanner.Bytes()
@@ -355,11 +357,18 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 			// provider-internal path (e.g. accounts/fireworks/models/glm-5p2) that
 			// must not override the clean request-time model used for logging/cost.
 			lineForTranslation := unwrapOpenAICompatProviderEnvelopeSSELine(line)
+			data := bytes.TrimSpace(bytes.TrimPrefix(lineForTranslation, dataTag))
+			if bytes.Equal(data, []byte("[DONE]")) || gjson.GetBytes(data, "type").String() == "response.completed" || gjson.GetBytes(data, "choices.0.finish_reason").String() != "" {
+				completed = true
+			}
 			if detail, ok := parseOpenAIStreamUsage(lineForTranslation); ok {
 				lastUsage = detail
 				hasUsage = true
 				if len(pendingResponsesCompleted) > 0 && isOpenAIStreamUsageOnly(lineForTranslation) {
-					out <- cliproxyexecutor.StreamChunk{Payload: patchResponsesCompletedUsage(pendingResponsesCompleted, lastUsage)}
+					if !sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Payload: patchResponsesCompletedUsage(pendingResponsesCompleted, lastUsage)}) {
+						reporter.recordCancellation(execCtx.Context)
+						return
+					}
 					pendingResponsesCompleted = nil
 				}
 			}
@@ -379,19 +388,41 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 					pendingResponsesCompleted = []byte(chunks[i])
 					continue
 				}
-				out <- cliproxyexecutor.StreamChunk{Payload: []byte(chunks[i])}
+				if !sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Payload: []byte(chunks[i])}) {
+					reporter.recordCancellation(execCtx.Context)
+					return
+				}
 			}
 		}
 		if len(pendingResponsesCompleted) > 0 {
 			if hasUsage {
 				pendingResponsesCompleted = patchResponsesCompletedUsage(pendingResponsesCompleted, lastUsage)
 			}
-			out <- cliproxyexecutor.StreamChunk{Payload: pendingResponsesCompleted}
+			if !sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Payload: pendingResponsesCompleted}) {
+				reporter.recordCancellation(execCtx.Context)
+				return
+			}
+		}
+		if completed {
+			if hasUsage {
+				reporter.publish(execCtx.Context, lastUsage)
+			}
+			reporter.ensurePublished(execCtx.Context)
+			return
+		}
+		if execCtx.Context.Err() != nil {
+			reporter.recordCancellation(execCtx.Context)
+			return
 		}
 		if errScan := scanner.Err(); errScan != nil {
+			if shouldSuppressUsageFailure(errScan, "") {
+				reporter.recordCancellation(execCtx.Context)
+				return
+			}
 			recorder.RecordResponseError(errScan)
 			reporter.publishFailure(execCtx.Context)
-			out <- cliproxyexecutor.StreamChunk{Err: errScan}
+			sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Err: errScan})
+			return
 		}
 		if hasUsage {
 			reporter.publish(execCtx.Context, lastUsage)

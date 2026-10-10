@@ -194,10 +194,17 @@ func loadFromRedis() error {
 type RequestStatistics struct {
 	mu sync.RWMutex
 
-	totalRequests int64
-	successCount  int64
-	failureCount  int64
-	totalTokens   int64
+	totalRequests        int64
+	successCount         int64
+	failureCount         int64
+	totalTokens          int64
+	attemptCount         int64
+	failedAttemptCount   int64
+	recoveredCount       int64
+	canceledCount        int64
+	logicalRequests      map[string]logicalRequestState
+	logicalRequestOrder  []string
+	logicalRequestCursor int
 
 	apis map[string]*apiStats
 
@@ -246,10 +253,14 @@ type TokenStats struct {
 
 // StatisticsSnapshot represents an immutable view of the aggregated metrics.
 type StatisticsSnapshot struct {
-	TotalRequests int64 `json:"total_requests"`
-	SuccessCount  int64 `json:"success_count"`
-	FailureCount  int64 `json:"failure_count"`
-	TotalTokens   int64 `json:"total_tokens"`
+	TotalRequests      int64 `json:"total_requests"`
+	SuccessCount       int64 `json:"success_count"`
+	FailureCount       int64 `json:"failure_count"`
+	TotalTokens        int64 `json:"total_tokens"`
+	AttemptCount       int64 `json:"attempt_count"`
+	FailedAttemptCount int64 `json:"failed_attempt_count"`
+	RecoveredCount     int64 `json:"recovered_count"`
+	CanceledCount      int64 `json:"canceled_count"`
 
 	APIs map[string]APISnapshot `json:"apis"`
 
@@ -337,11 +348,14 @@ func (s *RequestStatistics) ingest(ctx context.Context, record coreusage.Record)
 		hourKey := timestamp.Hour()
 
 		s.mu.Lock()
-		s.totalRequests++
-		if success {
-			s.successCount++
-		} else {
-			s.failureCount++
+		newRequest := s.countLogicalRequestLocked(statsKey, modelName, record, timestamp, success)
+		if newRequest {
+			s.totalRequests++
+			if success {
+				s.successCount++
+			} else {
+				s.failureCount++
+			}
 		}
 		s.totalTokens += totalTokens
 
@@ -359,10 +373,12 @@ func (s *RequestStatistics) ingest(ctx context.Context, record coreusage.Record)
 			LatencyMs:    record.LatencyMs,
 			FirstTokenMs: record.FirstTokenMs,
 			Failed:       failed,
-		})
+		}, newRequest)
 
-		s.requestsByDay[dayKey]++
-		s.requestsByHour[hourKey]++
+		if newRequest {
+			s.requestsByDay[dayKey]++
+			s.requestsByHour[hourKey]++
+		}
 		s.tokensByDay[dayKey] += totalTokens
 		s.tokensByHour[hourKey] += totalTokens
 		s.mu.Unlock()
@@ -420,15 +436,20 @@ func resolveDeferredUsageContent(inline, path string) string {
 	return inline + string(data)
 }
 
-func (s *RequestStatistics) updateAPIStats(stats *apiStats, model string, detail RequestDetail) {
-	stats.TotalRequests++
+func (s *RequestStatistics) updateAPIStats(stats *apiStats, model string, detail RequestDetail, countRequest ...bool) {
+	count := len(countRequest) == 0 || countRequest[0]
+	if count {
+		stats.TotalRequests++
+	}
 	stats.TotalTokens += detail.Tokens.TotalTokens
 	modelStatsValue, ok := stats.Models[model]
 	if !ok {
 		modelStatsValue = &modelStats{}
 		stats.Models[model] = modelStatsValue
 	}
-	modelStatsValue.TotalRequests++
+	if count {
+		modelStatsValue.TotalRequests++
+	}
 	modelStatsValue.TotalTokens += detail.Tokens.TotalTokens
 }
 
@@ -446,6 +467,10 @@ func (s *RequestStatistics) Snapshot() StatisticsSnapshot {
 	result.SuccessCount = s.successCount
 	result.FailureCount = s.failureCount
 	result.TotalTokens = s.totalTokens
+	result.AttemptCount = s.attemptCount
+	result.FailedAttemptCount = s.failedAttemptCount
+	result.RecoveredCount = s.recoveredCount
+	result.CanceledCount = s.canceledCount
 
 	result.APIs = make(map[string]APISnapshot, len(s.apis))
 	for apiName, stats := range s.apis {
@@ -550,6 +575,22 @@ func (s *RequestStatistics) MergeSnapshot(snapshot StatisticsSnapshot) MergeResu
 			result.Added += modelSnapshot.TotalRequests
 		}
 	}
+	if snapshot.SuccessCount+snapshot.FailureCount == result.Added && snapshot.FailureCount >= 0 {
+		s.successCount -= snapshot.FailureCount
+		s.failureCount += snapshot.FailureCount
+	}
+	attempts := snapshot.AttemptCount
+	if attempts < result.Added {
+		attempts = result.Added
+	}
+	s.attemptCount += attempts
+	failedAttempts := snapshot.FailedAttemptCount
+	if failedAttempts < snapshot.FailureCount {
+		failedAttempts = snapshot.FailureCount
+	}
+	s.failedAttemptCount += failedAttempts
+	s.recoveredCount += snapshot.RecoveredCount
+	s.canceledCount += snapshot.CanceledCount
 
 	return result
 }
@@ -568,7 +609,7 @@ func (s *RequestStatistics) recordImported(apiName, modelName string, stats *api
 	}
 	s.totalTokens += totalTokens
 
-	s.updateAPIStats(stats, modelName, detail)
+	s.updateAPIStats(stats, modelName, detail, true)
 
 	dayKey := detail.Timestamp.Format("2006-01-02")
 	hourKey := detail.Timestamp.Hour()

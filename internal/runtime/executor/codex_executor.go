@@ -175,7 +175,7 @@ func (e *CodexExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, re
 	recorder := execCtx.Recorder()
 	recorder.RecordRequest(url, http.MethodPost, httpReq.Header.Clone(), body)
 	httpClient := execCtx.HTTPClient(0)
-	httpResp, err := httpClient.Do(httpReq) //nolint:bodyclose // body is closed by the defer below.
+	httpResp, body, err := doCodexRequestWithReasoningRecovery(execCtx.Context, httpClient, httpReq, body, recorder, reporter) //nolint:bodyclose // body is closed by the defer below.
 	if err != nil {
 		recorder.RecordResponseError(err)
 		reporter.publishFailureWithContentBytes(execCtx.Context, req.Payload, err.Error())
@@ -391,7 +391,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 	recorder.RecordRequest(url, http.MethodPost, httpReq.Header.Clone(), body)
 	httpClient := execCtx.HTTPClient(0)
 	//nolint:bodyclose // success body is consumed and closed by the stream goroutine below.
-	httpResp, err := httpClient.Do(httpReq)
+	httpResp, body, err := doCodexRequestWithReasoningRecovery(execCtx.Context, httpClient, httpReq, body, recorder, reporter)
 	if err != nil {
 		recorder.RecordResponseError(err)
 		reporter.publishFailureWithContentBytes(execCtx.Context, req.Payload, err.Error())
@@ -417,6 +417,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 	reporter.setInputContentBytes(req.Payload)
 	go func() {
 		defer close(out)
+		defer reporter.discardUnpublishedContent()
 		defer func() {
 			if errClose := httpResp.Body.Close(); errClose != nil {
 				log.Errorf("codex executor: close response body error: %v", errClose)
@@ -454,34 +455,42 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 
 				chunks := sdktranslator.TranslateStream(execCtx.Context, to, execCtx.SourceFormat, req.Model, execCtx.OriginalPayload, body, eventLine, &param)
 				for i := range chunks {
-					out <- cliproxyexecutor.StreamChunk{Payload: []byte(chunks[i])}
+					if !sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Payload: []byte(chunks[i])}) {
+						reporter.recordCancellation(execCtx.Context)
+						return
+					}
 				}
 			}
 			if terminalErr != nil {
 				recorder.RecordResponseError(terminalErr)
 				reporter.publishFailure(execCtx.Context)
-				out <- cliproxyexecutor.StreamChunk{Err: terminalErr}
+				sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Err: terminalErr})
 				return
 			}
-		}
-		if errScan := scanner.Err(); errScan != nil {
-			if shouldSuppressUsageFailure(errScan, "") {
-				out <- cliproxyexecutor.StreamChunk{Err: errScan}
-				return
-			}
-			recorder.RecordResponseError(errScan)
-			reporter.publishFailure(execCtx.Context)
-			out <- cliproxyexecutor.StreamChunk{Err: errScan}
-			return
 		}
 		if completed {
 			reporter.ensurePublished(execCtx.Context)
 			return
 		}
+		if execCtx.Context.Err() != nil {
+			reporter.recordCancellation(execCtx.Context)
+			return
+		}
+		if errScan := scanner.Err(); errScan != nil {
+			if shouldSuppressUsageFailure(errScan, "") {
+				reporter.recordCancellation(execCtx.Context)
+				sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Err: errScan})
+				return
+			}
+			recorder.RecordResponseError(errScan)
+			reporter.publishFailure(execCtx.Context)
+			sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Err: errScan})
+			return
+		}
 		streamErr := newCodexResponsesIncompleteError()
 		recorder.RecordResponseError(streamErr)
 		reporter.publishFailure(execCtx.Context)
-		out <- cliproxyexecutor.StreamChunk{Err: streamErr}
+		sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Err: streamErr})
 	}()
 	return &cliproxyexecutor.StreamResult{Headers: httpResp.Header.Clone(), Chunks: out}, nil
 }
