@@ -93,6 +93,7 @@ func buildRequestDetailContent(ctx context.Context, includeBodies ...bool) strin
 	}
 
 	req := ginCtx.Request
+	modelResolution, _ := ginCtx.Get("cliproxy.model_resolution")
 	includeExchangeBodies := len(includeBodies) == 0 || includeBodies[0]
 	var apiRequest any
 	var apiResponse any
@@ -125,6 +126,9 @@ func buildRequestDetailContent(ctx context.Context, includeBodies ...bool) strin
 	// Empty exchange sections add a compressed content row cost without carrying
 	// diagnostics, so only persist them when an upstream snapshot exists.
 	detail := map[string]any{"client": client}
+	if modelResolution != nil {
+		detail["model_resolution"] = modelResolution
+	}
 	if requestLog := bytesToString(apiRequest); requestLog != "" {
 		detail["upstream"] = map[string]any{"request_log": requestLog}
 	}

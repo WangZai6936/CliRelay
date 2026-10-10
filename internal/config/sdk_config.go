@@ -11,6 +11,9 @@ type SDKConfig struct {
 	// RequestModelAliases rewrites legacy client model names before admission.
 	// Only the resolved target's catalog and API-key permissions grant access.
 	RequestModelAliases map[string]string `yaml:"request-model-aliases,omitempty" json:"request-model-aliases,omitempty"`
+	// TextModelFallback is used for missing/disabled text models or missing
+	// routes. Empty disables it; target authorization is always checked.
+	TextModelFallback string `yaml:"text-model-fallback,omitempty" json:"text-model-fallback,omitempty"`
 	// ProxyURL is the URL of an optional proxy server to use for outbound requests.
 	ProxyURL string `yaml:"proxy-url" json:"proxy-url"`
 

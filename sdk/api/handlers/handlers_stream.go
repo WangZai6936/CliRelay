@@ -50,6 +50,14 @@ func (h *BaseAPIHandler) StartStreamWithAuthManager(ctx context.Context, handler
 	}
 	opts.Metadata = reqMeta
 	streamResult, err := h.AuthManager.ExecuteStream(ctx, providers, req, opts)
+	modelFallbackUsed := false
+	if err != nil {
+		if nextProviders, nextReq, nextOpts, ok := h.fallbackExecution(ctx, req, opts, err); ok {
+			providers, req, opts = nextProviders, nextReq, nextOpts
+			modelFallbackUsed = true
+			streamResult, err = h.AuthManager.ExecuteStream(ctx, providers, req, opts)
+		}
+	}
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -83,7 +91,7 @@ func (h *BaseAPIHandler) StartStreamWithAuthManager(ctx context.Context, handler
 	// Capture retry budget before the goroutine so the no-retry path does not close
 	// over req/opts (those hold multi-MB inbound bodies for the whole SSE lifetime).
 	maxBootstrapRetries := StreamingBootstrapRetries(h.Cfg)
-	if maxBootstrapRetries <= 0 {
+	if maxBootstrapRetries <= 0 && (h.Cfg == nil || h.Cfg.TextModelFallback == "") {
 		go forwardStreamWithoutBootstrapRetry(ctx, handlerType, chunks, dataChan, errChan)
 	} else {
 		go forwardStreamWithBootstrapRetry(
@@ -99,6 +107,7 @@ func (h *BaseAPIHandler) StartStreamWithAuthManager(ctx context.Context, handler
 			dataChan,
 			errChan,
 			maxBootstrapRetries,
+			modelFallbackUsed,
 		)
 	}
 	return dataChan, upstreamHeaders, errChan, nil
@@ -150,6 +159,7 @@ func forwardStreamWithBootstrapRetry(
 	dataChan chan<- []byte,
 	errChan chan<- *StreamErrorMessage,
 	maxBootstrapRetries int,
+	modelFallbackUsed bool,
 ) {
 	defer close(dataChan)
 	defer close(errChan)
@@ -165,6 +175,21 @@ outer:
 			}
 			if chunk.Err != nil {
 				streamErr := chunk.Err
+				if !sentPayload && !modelFallbackUsed {
+					if nextProviders, nextReq, nextOpts, ok := h.fallbackExecution(ctx, req, opts, streamErr); ok {
+						modelFallbackUsed = true
+						providers, req, opts = nextProviders, nextReq, nextOpts
+						retryResult, retryErr := h.AuthManager.ExecuteStream(ctx, providers, req, opts)
+						if retryErr == nil {
+							if passthroughHeadersEnabled {
+								replaceHeader(upstreamHeaders, FilterUpstreamHeaders(retryResult.Headers))
+							}
+							chunks = retryResult.Chunks
+							continue outer
+						}
+						streamErr = retryErr
+					}
+				}
 				// Safe bootstrap recovery: if the upstream fails before any payload bytes are sent,
 				// retry a few times (to allow auth rotation / transient recovery).
 				if !sentPayload && bootstrapRetries < maxBootstrapRetries && bootstrapEligibleStreamErr(streamErr) {
@@ -192,6 +217,8 @@ outer:
 				}
 			}
 			sentPayload = true
+			req.Payload = nil
+			opts.OriginalRequest = nil
 			if !sendStreamData(ctx, dataChan, cloneBytes(chunk.Payload)) {
 				return
 			}

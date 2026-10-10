@@ -8,12 +8,15 @@ import (
 
 func TestRequestModelAliasesLoadFromServerConfigWithoutClientChanges(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte("port: 8317\nrequest-model-aliases:\n  jiezi: gpt-6-luna\n  gpt-6-sol: gpt-6-luna\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("port: 8317\ntext-model-fallback: gpt-6-luna\nrequest-model-aliases:\n  jiezi: gpt-6-luna\n  gpt-6-sol: gpt-6-luna\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := LoadConfig(path)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if cfg.TextModelFallback != "gpt-6-luna" {
+		t.Fatal("text fallback was not loaded")
 	}
 	if cfg.ResolveRequestModelAlias("jiezi") != "gpt-6-luna" || cfg.SDKConfig.ResolveRequestModelAlias("gpt-6-sol") != "gpt-6-luna" || cfg.ResolveRequestModelAlias("grok-4.7") != "grok-4.7" {
 		t.Fatal("model aliases were not retained by server/SDK config")

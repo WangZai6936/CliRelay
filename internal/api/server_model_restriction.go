@@ -20,6 +20,10 @@ import (
 
 func (s *Server) modelRestrictionMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		gate := s.buildModelGate(c)
+		if s.cfg != nil && (s.cfg.TextModelFallback != "" || len(s.cfg.RequestModelAliases) > 0) {
+			c.Set(handlers.RequestModelResolverContextKey, s.requestModelResolver(c, gate))
+		}
 		if !s.rewriteRequestModelAlias(c) {
 			return
 		}
@@ -32,7 +36,7 @@ func (s *Server) modelRestrictionMiddleware() gin.HandlerFunc {
 			// recognised with the same check the upgrader uses, so every
 			// accepted upgrade is gated.
 			if middleware.IsWebsocketUpgrade(c.Request) {
-				if gate := s.buildModelGate(c); gate != nil {
+				if gate != nil {
 					c.Set(handlers.ModelGateContextKey, gate)
 				}
 			}
@@ -43,7 +47,6 @@ func (s *Server) modelRestrictionMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		gate := s.buildModelGate(c)
 		if gate == nil {
 			c.Next()
 			return

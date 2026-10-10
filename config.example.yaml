@@ -25,6 +25,10 @@ port: 8317
 #   jiezi: gpt-6-luna
 #   gpt-6-sol: gpt-6-luna
 
+# Generic fallback for text generation: missing/disabled models or no route.
+# Uses normal target authorization and route scope; multimodal input is excluded.
+# text-model-fallback: gpt-6-luna
+
 # Maximum time in seconds the main API server may spend reading request headers + body
 # from downstream clients before returning a timeout.
 # Increase this if clients send large JSON or multimodal payloads through slow Docker /

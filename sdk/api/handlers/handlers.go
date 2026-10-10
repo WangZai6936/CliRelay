@@ -671,6 +671,11 @@ func (h *BaseAPIHandler) ExecuteWithAuthManager(ctx context.Context, handlerType
 	opts.Metadata = reqMeta
 	resp, err := h.AuthManager.Execute(ctx, providers, req, opts)
 	if err != nil {
+		if nextProviders, nextReq, nextOpts, ok := h.fallbackExecution(ctx, req, opts, err); ok {
+			resp, err = h.AuthManager.Execute(ctx, nextProviders, nextReq, nextOpts)
+		}
+	}
+	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			status = 499 // Client Closed Request

@@ -76,6 +76,7 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 	var lastRequest []byte
 	lastResponseOutput := []byte("[]")
 	pinnedAuthID := ""
+	lastRoutedModel := ""
 	// Published by the quota middleware on the upgrade request when the key has
 	// limits; it stays the same for the life of the connection.
 	quotaGate := handlers.QuotaGateFromGin(c)
@@ -166,9 +167,16 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 		}
 
 		modelName := gjson.GetBytes(requestJSON, "model").String()
-		if target := h.Cfg.ResolveRequestModelAlias(modelName); target != modelName {
+		c.Set(handlers.RequestModelResolutionContextKey, nil)
+		resolution := handlers.RequestModelResolution{RequestedModel: modelName, Model: h.Cfg.ResolveRequestModelAlias(modelName), Reason: "alias"}
+		if resolver := handlers.RequestModelResolverFromGin(c); resolver != nil {
+			resolution = resolver(modelName, requestJSON, "")
+		}
+		if target := resolution.Model; target != modelName {
+			pinnedAuthID = ""
 			requestJSON, _ = sjson.SetBytes(requestJSON, "model", target)
 			modelName = target
+			handlers.RememberRequestModelResolution(c, resolution)
 		}
 		// A turn reaches the executor and spends upstream quota just like a POST,
 		// so it passes the same quota checks, once per turn. They run before the
@@ -199,6 +207,9 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 			}
 		}
 		completedOutput, errForward := func() ([]byte, error) {
+			if lastRoutedModel != "" && lastRoutedModel != modelName {
+				pinnedAuthID = ""
+			}
 			logging.RenewGinRequestCorrelationID(c)
 			// Deferred so the slot comes back however the turn ends: completed,
 			// failed upstream, client gone, or a panic.
@@ -208,11 +219,8 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 			cliCtx = handlers.WithExecutionSessionID(cliCtx, passthroughSessionID)
 			if pinnedAuthID != "" {
 				cliCtx = handlers.WithPinnedAuthID(cliCtx, pinnedAuthID)
-			} else {
-				cliCtx = handlers.WithSelectedAuthIDCallback(cliCtx, func(authID string) {
-					pinnedAuthID = strings.TrimSpace(authID)
-				})
 			}
+			cliCtx = handlers.WithSelectedAuthIDCallback(cliCtx, func(authID string) { pinnedAuthID = strings.TrimSpace(authID) })
 			dataChan, _, errChan := h.ExecuteStreamWithAuthManager(cliCtx, h.HandlerType(), modelName, requestJSON, "")
 			return h.forwardResponsesWebsocket(c, conn, cliCancel, dataChan, errChan, &wsBodyLog, passthroughSessionID)
 		}()
@@ -223,6 +231,12 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 			return
 		}
 		lastResponseOutput = completedOutput
+		lastRoutedModel = modelName
+		if saved, ok := c.Get(handlers.RequestModelResolutionContextKey); ok {
+			if used, ok := saved.(handlers.RequestModelResolution); ok {
+				lastRoutedModel = used.Model
+			}
+		}
 	}
 }
 
