@@ -232,6 +232,15 @@ func xaiModelInfoFromPayload(item xaiModelPayload, modelID string, now int64) *s
 		model.DisplayName = firstNonEmptyString(static.DisplayName, model.DisplayName)
 		model.Thinking = cloneXAIThinking(static.Thinking)
 	}
+	// These live reasoning models have no complete static capability definition.
+	// Reuse the compatible-model path so the upstream validates explicitly supplied
+	// effort instead of treating missing metadata as "does not support thinking".
+	if model.Thinking == nil {
+		switch strings.ToLower(modelID) {
+		case "grok-4.6", "grok-4.7", "grok-4.7-build-fast", "grok-composer-2.5-fast":
+			model.UserDefined = true
+		}
+	}
 	return model
 }
 

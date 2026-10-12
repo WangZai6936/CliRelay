@@ -250,6 +250,7 @@ func (ec *ExecutionContext) TranslateRequestPair(payload []byte) ([]byte, []byte
 		payload,
 		ec.Execution.TranslateAsStream,
 	)
+	translated = ec.applyConfiguredReasoningDefault(translated, payload)
 	// Skip second translate when original is the same request (empty override,
 	// shared storage with req.Payload, or payload already is OriginalPayload).
 	if ec.originalPayloadIsRequest ||
@@ -285,6 +286,7 @@ func (ec *ExecutionContext) ApplyPayloadConfig(payload, originalTranslated []byt
 	if protocol == "" {
 		protocol = ec.Execution.TargetFormat.String()
 	}
+	originalTranslated = ec.preserveSuffixReasoningForDefaults(payload, originalTranslated)
 	return applyPayloadConfigWithRoot(
 		ec.Config,
 		ec.BaseModel,

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/thinking"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -13,8 +14,17 @@ import (
 const codexResponsesImageSizeHintPrefix = "Preferred image size: "
 
 func ensureTranslatedCodexModel(body []byte, fallback string) []byte {
-	if strings.TrimSpace(gjson.GetBytes(body, "model").String()) != "" {
-		return body
+	model := strings.TrimSpace(gjson.GetBytes(body, "model").String())
+	if model != "" {
+		parsed := thinking.ParseSuffix(model)
+		if !parsed.HasSuffix {
+			return body
+		}
+		// A thinking suffix is local routing syntax, not part of the upstream ID.
+		// Prefer the resolved executor model so aliases remain correctly routed.
+		if strings.TrimSpace(fallback) == "" {
+			fallback = parsed.ModelName
+		}
 	}
 	return util.MutateTopLevelObject(body, map[string][]byte{
 		"model": util.JSONString(fallback),

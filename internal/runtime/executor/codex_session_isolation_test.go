@@ -116,7 +116,7 @@ func codexCacheHelperRequest(t *testing.T, auth *cliproxyauth.Auth, from sdktran
 	if len(opts) > 0 {
 		execOpts = opts[0]
 	}
-	got, err := (&CodexExecutor{}).cacheHelper(context.Background(), auth, from, "https://chatgpt.com/backend-api/codex/responses", req, req.Payload, execOpts)
+	got, _, err := (&CodexExecutor{}).cacheHelper(context.Background(), auth, from, "https://chatgpt.com/backend-api/codex/responses", req, req.Payload, execOpts)
 	if err != nil {
 		t.Fatalf("cacheHelper() error = %v", err)
 	}

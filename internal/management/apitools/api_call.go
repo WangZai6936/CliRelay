@@ -21,20 +21,17 @@ import (
 
 var errBlockedAPICallTarget = errors.New("blocked api-call target")
 
+// blockedAPICallPrefixes lists dangerous ranges that are NOT private/loopback.
+// Private (RFC1918 / ULA) and loopback are intentionally allowed so the
+// management panel「获取 /models」can reach Docker/intranet upstreams.
 var blockedAPICallPrefixes = []netip.Prefix{
 	netip.MustParsePrefix("0.0.0.0/8"),
-	netip.MustParsePrefix("10.0.0.0/8"),
 	netip.MustParsePrefix("100.64.0.0/10"),
-	netip.MustParsePrefix("127.0.0.0/8"),
 	netip.MustParsePrefix("169.254.0.0/16"),
-	netip.MustParsePrefix("172.16.0.0/12"),
-	netip.MustParsePrefix("192.168.0.0/16"),
 	netip.MustParsePrefix("198.18.0.0/15"),
 	netip.MustParsePrefix("224.0.0.0/4"),
 	netip.MustParsePrefix("240.0.0.0/4"),
 	netip.MustParsePrefix("::/128"),
-	netip.MustParsePrefix("::1/128"),
-	netip.MustParsePrefix("fc00::/7"),
 	netip.MustParsePrefix("fe80::/10"),
 	netip.MustParsePrefix("ff00::/8"),
 }
@@ -191,7 +188,11 @@ func apiCallAddrBlocked(addr netip.Addr) bool {
 		return true
 	}
 	addr = addr.Unmap()
-	if addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsUnspecified() {
+	// Intranet is allowed for management fetch (Docker service DNS / private / loopback).
+	if addr.IsLoopback() || addr.IsPrivate() {
+		return false
+	}
+	if addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsUnspecified() {
 		return true
 	}
 	for _, prefix := range blockedAPICallPrefixes {

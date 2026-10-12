@@ -148,10 +148,10 @@ func applyCodexPromptCacheHeaders(auth *cliproxyauth.Auth, from sdktranslator.Fo
 			key := codexPromptCacheMapKey(auth, req.Model, userIDResult.String())
 			cache.ID = getOrCreateCodexCacheID(key, codexClaudePromptCacheTTL, uuid.NewString)
 		}
-	} else if from == "openai-response" {
+	} else if from == sdktranslator.FormatOpenAIResponse || from == sdktranslator.FormatOpenAI {
 		if promptCacheKey := gjson.GetBytes(req.Payload, "prompt_cache_key"); promptCacheKey.Exists() {
 			cache.ID = codexAccountScopedExplicitSessionID(auth, promptCacheKey.String())
-		} else {
+		} else if shouldSynthesizeCodexPromptCache(from, req.Payload) {
 			// Same fallback as the HTTP path: a client that sends no session
 			// identifier still gets a stable per-conversation cache key.
 			cache.ID = codexSyntheticSessionID(auth, req.Model, codexSessionPromptCacheSeed(opts, req.Payload))
