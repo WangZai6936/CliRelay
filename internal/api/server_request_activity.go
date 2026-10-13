@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 	"strings"
+
+	coreusage "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/usage"
 )
 
 // trackActiveAPIRequests counts request handlers on this server, before body
@@ -15,6 +17,8 @@ func (s *Server) trackActiveAPIRequests(next http.Handler) http.Handler {
 		if isActiveAPIRequestPath(r.URL.Path) {
 			s.activeAPIRequests.Add(1)
 			defer s.activeAPIRequests.Add(-1)
+			r = r.WithContext(coreusage.BeginRequest(r.Context()))
+			defer coreusage.FinishRequest(r.Context())
 		}
 		next.ServeHTTP(w, r)
 	})

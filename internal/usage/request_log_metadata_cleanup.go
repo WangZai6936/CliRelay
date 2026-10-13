@@ -65,6 +65,9 @@ func cleanupExpiredRequestLogMetadata(ctx context.Context, db *sql.DB) (int64, e
 		case <-time.After(20 * time.Millisecond):
 		}
 	}
+	if err := cleanupExpiredRequestOutcomes(ctx, db, cfg, batch, deadline); err != nil {
+		return deletedTotal, err
+	}
 	return deletedTotal, nil
 }
 

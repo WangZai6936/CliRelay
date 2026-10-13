@@ -52,7 +52,8 @@ func QueryLogs(params LogQueryParams) (LogQueryResult, error) {
 	offset := (params.Page - 1) * params.Size
 	querySQL := "SELECT id, timestamp, api_key, api_key_id, api_key_name, model, thinking_level, upstream_model, upstream_response_model, vision_fallback_model, source, channel_name, auth_index, auth_subject_id, " +
 		"failed, streaming, latency_ms, first_token_ms, input_tokens, output_tokens, reasoning_tokens, cached_tokens, total_tokens, " +
-		"cost, " +
+		"cost, request_id, attempt, failure_stage, COALESCE((SELECT result FROM request_outcomes outcome WHERE outcome.tenant_id = request_logs.tenant_id AND outcome.request_id = request_logs.request_id), 'unknown'), " +
+		"upstream_protocol, upstream_transport_group, upstream_transport_kind, upstream_connection_id, upstream_connection_reused, upstream_error_stage, " +
 		"(CASE WHEN EXISTS (SELECT 1 FROM request_log_content content WHERE content.tenant_id = request_logs.tenant_id AND content.log_id = request_logs.id) " +
 		"OR length(input_content) > 0 OR length(output_content) > 0 THEN 1 ELSE 0 END) as has_content " +
 		"FROM request_logs" + where +
@@ -71,11 +72,13 @@ func QueryLogs(params LogQueryParams) (LogQueryResult, error) {
 		var row LogRow
 		var ts storedTime
 		var failedInt, streamingInt, hasContentInt int
+		var connectionReused sql.NullBool
 		if err := rows.Scan(
 			&row.ID, &ts, &row.APIKey, &row.APIKeyID, &row.APIKeyName, &row.Model, &row.ThinkingLevel, &row.UpstreamModel, &row.UpstreamResponseModel, &row.VisionFallbackModel, &row.Source, &row.ChannelName,
 			&row.AuthIndex, &row.AuthSubjectID, &failedInt, &streamingInt, &row.LatencyMs, &row.FirstTokenMs,
 			&row.InputTokens, &row.OutputTokens, &row.ReasoningTokens,
-			&row.CachedTokens, &row.TotalTokens, &row.Cost, &hasContentInt,
+			&row.CachedTokens, &row.TotalTokens, &row.Cost, &row.RequestID, &row.Attempt, &row.FailureStage, &row.RequestOutcome,
+			&row.UpstreamProtocol, &row.UpstreamTransportGroup, &row.UpstreamTransportKind, &row.UpstreamConnectionID, &connectionReused, &row.UpstreamErrorStage, &hasContentInt,
 		); err != nil {
 			log.Warnf("usage: scan log row failed: %v", err)
 			return LogQueryResult{}, fmt.Errorf("usage: scan row: %w", err)
@@ -86,6 +89,10 @@ func QueryLogs(params LogQueryParams) (LogQueryResult, error) {
 		row.Failed = failedInt != 0
 		row.Streaming = streamingInt != 0
 		row.HasContent = hasContentInt != 0
+		if connectionReused.Valid {
+			reused := connectionReused.Bool
+			row.UpstreamConnectionReused = &reused
+		}
 		// Derived on read so every row is judged by the current alias rule rather
 		// than by whatever it was when the row was written.
 		row.UpstreamModelMismatch = UpstreamModelMismatch(row.Model, row.UpstreamModel, row.UpstreamResponseModel)
@@ -354,6 +361,10 @@ func QueryStats(params LogQueryParams) (LogStats, error) {
 		log.Warnf("usage: stats query failed: %v", err)
 		return LogStats{}, err
 	}
+	stats.RequestOutcomes, err = QueryRequestOutcomeStats(params)
+	if err != nil {
+		return LogStats{}, err
+	}
 	return stats, nil
 }
 
@@ -413,46 +424,6 @@ func queryStatsFromDetails(params LogQueryParams) (LogStats, error) {
 	return agg.toLogStats(), nil
 }
 
-// DeleteLogsByAPIKey removes all request_logs and request_log_content entries
-// for the given API key. Returns the number of deleted log rows.
-func DeleteLogsByAPIKey(apiKey string) (int64, error) {
-	return DeleteLogsByAPIKeyForTenant(systemTenantID, apiKey)
-}
-
-func DeleteLogsByAPIKeyForTenant(tenantID, apiKey string) (int64, error) {
-	db := getDB()
-	if db == nil {
-		return 0, fmt.Errorf("usage: database not initialised")
-	}
-	if apiKey == "" {
-		return 0, fmt.Errorf("usage: empty api_key")
-	}
-
-	// Delete associated content rows first (FK cascade may handle this,
-	// but be explicit to ensure cleanup even without FK enforcement).
-	tenantID = normalizeTenantID(tenantID)
-	clause, args := buildSingleAPIKeySelectorClauseForTenant(tenantID, apiKey)
-	predicate := strings.TrimPrefix(clause, " WHERE ")
-	args = append([]interface{}{tenantID}, args...)
-	clause = " WHERE tenant_id = ? AND " + predicate
-	_, _ = db.Exec(
-		`DELETE FROM request_log_content WHERE tenant_id = ? AND log_id IN
-		 (SELECT id FROM request_logs`+clause+`)`, append([]interface{}{tenantID}, args...)...)
-
-	result, err := db.Exec("DELETE FROM request_logs"+clause, args...)
-	if err != nil {
-		return 0, fmt.Errorf("usage: delete logs by api_key: %w", err)
-	}
-	deleted, err := result.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf("usage: affected rows: %w", err)
-	}
-	if deleted > 0 {
-		log.Infof("usage: deleted %d request log(s) for api_key=%s", deleted, apiKey)
-	}
-	return deleted, nil
-}
-
 func rowsAffected(result sql.Result) (int64, error) {
 	if result == nil {
 		return 0, nil
@@ -506,6 +477,9 @@ func clearRequestLogs(db *sql.DB, options ClearRequestLogsOptions) (ClearRequest
 	var result ClearRequestLogsResult
 
 	if options.ClearRequestRecords {
+		if _, err := tx.Exec("DELETE FROM request_outcomes WHERE tenant_id = ?", options.TenantID); err != nil {
+			return ClearRequestLogsResult{}, fmt.Errorf("usage: clear request_outcomes: %w", err)
+		}
 		contentResult, err := tx.Exec("DELETE FROM request_log_content WHERE tenant_id = ?", options.TenantID)
 		if err != nil {
 			return ClearRequestLogsResult{}, fmt.Errorf("usage: clear request_log_content: %w", err)

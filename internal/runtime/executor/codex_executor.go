@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	codexauth "github.com/router-for-me/CLIProxyAPI/v6/internal/auth/codex"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/diagnostics"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/thinking"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
@@ -465,6 +466,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 						reporter.recordCancellation(execCtx.Context)
 						return
 					}
+					diagnostics.RecordUpstreamOutput(execCtx.Context, len(payload))
 				}
 			}
 			if terminalErr != nil {

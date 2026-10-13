@@ -60,6 +60,12 @@ func (s *Server) serveManagementControlPanel(c *gin.Context) {
 		c.AbortWithStatus(http.StatusNotFound)
 		return
 	}
+	if c.Param("filepath") == "/runtime/request-outcomes" {
+		setPanelSecurityHeaders(c)
+		c.Header("Cache-Control", "no-store")
+		c.Data(http.StatusOK, "text/html; charset=utf-8", requestOutcomePanel)
+		return
+	}
 
 	panelDir := s.resolvePanelDir()
 	if panelDir == "" {
@@ -87,7 +93,7 @@ func (s *Server) serveManagementControlPanel(c *gin.Context) {
 			}
 		}
 		setPanelSecurityHeaders(c)
-		c.File(filePath)
+		serveManagementHTMLWithOutcomeLink(c, filePath)
 		return
 	}
 
@@ -113,7 +119,7 @@ func (s *Server) serveManagementControlPanel(c *gin.Context) {
 	}
 	setPanelSecurityHeaders(c)
 	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
-	c.File(htmlFile)
+	serveManagementHTMLWithOutcomeLink(c, htmlFile)
 }
 
 func clearServerWriteDeadline(c *gin.Context) {

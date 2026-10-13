@@ -19,6 +19,8 @@ const (
 // Config represents the application's configuration, loaded from a YAML file.
 type Config struct {
 	SDKConfig `yaml:",inline"`
+	// CodexHTTPTransport controls the opt-in Codex HTTP protocol comparison.
+	CodexHTTPTransport CodexHTTPTransportConfig `yaml:"codex-http-transport,omitempty" json:"codex-http-transport,omitempty"`
 	// Host is the network host/interface on which the API server will bind.
 	// Default is empty ("") to bind all interfaces (IPv4 + IPv6). Use "127.0.0.1" or "localhost" for local-only access.
 	Host string `yaml:"host" json:"-"`

@@ -37,6 +37,7 @@ const (
 	RuntimeSettingErrorLogsMaxFiles  = "error-logs-max-files"
 	RuntimeSettingRequestLogStorage  = "request-log-storage"
 	RuntimeSettingProxyURL           = "proxy-url"
+	RuntimeSettingCodexHTTPTransport = "codex-http-transport"
 )
 
 // Specs lists every runtime setting a config.Config is built from.
@@ -64,6 +65,8 @@ func generalSpecs() []Spec {
 	return []Spec{
 		valueSpec(RuntimeSettingDebug, func(c *config.Config) *bool { return &c.Debug }, isTrue),
 		valueSpec(RuntimeSettingRequestRetry, func(c *config.Config) *int { return &c.RequestRetry }, isNonZero),
+		valueSpec(RuntimeSettingCodexHTTPTransport, func(c *config.Config) *config.CodexHTTPTransportConfig { return &c.CodexHTTPTransport },
+			func(v config.CodexHTTPTransportConfig) bool { return v.HTTP1Percent != 0 }),
 		valueSpec(RuntimeSettingMaxRetryInterval, func(c *config.Config) *int { return &c.MaxRetryInterval }, isNonZero),
 		valueSpec(RuntimeSettingQuotaExceeded, func(c *config.Config) *config.QuotaExceeded { return &c.QuotaExceeded },
 			func(v config.QuotaExceeded) bool { return v.SwitchProject || v.SwitchPreviewModel }),
@@ -153,7 +156,7 @@ func ReloadScopeForKey(key string) ReloadScope {
 		RuntimeSettingOpenCodeGoKeys, RuntimeSettingClineKeys, RuntimeSettingOllamaCloudKeys, RuntimeSettingCommandCodeKeys,
 		RuntimeSettingOpenAICompatibility, RuntimeSettingVertexCompatKeys,
 		RuntimeSettingClaudeHeaderDefaults, RuntimeSettingKimiHeaderDefaults, RuntimeSettingIdentityFingerprint,
-		RuntimeSettingCodexOAuthAdmission, RuntimeSettingPayload, RuntimeSettingProxyURL:
+		RuntimeSettingCodexOAuthAdmission, RuntimeSettingPayload, RuntimeSettingProxyURL, RuntimeSettingCodexHTTPTransport:
 		return ReloadRuntime
 	default:
 		return ReloadLight

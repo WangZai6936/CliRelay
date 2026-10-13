@@ -89,6 +89,7 @@ func copyProcessGlobalRuntimeToggles(src, dst *config.Config) {
 	dst.SystemStatsWebSocketMaxAgeSeconds = src.SystemStatsWebSocketMaxAgeSeconds
 	dst.WebsocketAuth = src.WebsocketAuth
 	dst.RequestRetry = src.RequestRetry
+	dst.CodexHTTPTransport = src.CodexHTTPTransport
 	dst.MaxRetryInterval = src.MaxRetryInterval
 	dst.QuotaExceeded = src.QuotaExceeded
 	dst.ForceModelPrefix = src.ForceModelPrefix

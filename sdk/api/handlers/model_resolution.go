@@ -5,9 +5,9 @@ import (
 	"errors"
 
 	"github.com/gin-gonic/gin"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
+	"github.com/router-for-me/CLIProxyAPI/v6/sdk/requestctx"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
@@ -106,7 +106,7 @@ func (h *BaseAPIHandler) fallbackExecution(ctx context.Context, req coreexecutor
 	if reason == "" {
 		return nil, req, opts, false
 	}
-	c, _ := ctx.Value(util.ContextKeyGin).(*gin.Context)
+	c, _ := ctx.Value(requestctx.ContextKeyGin).(*gin.Context)
 	resolver := RequestModelResolverFromGin(c)
 	if resolver == nil {
 		return nil, req, opts, false

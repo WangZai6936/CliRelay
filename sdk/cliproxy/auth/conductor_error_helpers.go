@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	"net/http"
 	"strings"
 	"time"
@@ -123,7 +122,7 @@ func isRequestInvalidError(err error) bool {
 		return false
 	}
 	status := statusCodeFromError(err)
-	if status == http.StatusInsufficientStorage && util.IsUpstreamRequestBufferLimit(err) {
+	if status == http.StatusInsufficientStorage && cliproxyexecutor.IsUpstreamRequestBufferLimit(err) {
 		return true
 	}
 	if status != http.StatusBadRequest {

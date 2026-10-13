@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	coreusage "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/usage"
 	"strings"
 	"time"
 )
@@ -41,10 +42,20 @@ var errUsageSpoolRecordInvalid = errors.New("usage: invalid spooled request log 
 // cost are resolved when the record is finally written, because resolving
 // them while the database is unreachable would bake in the fallbacks.
 type usageSpoolRecord struct {
-	Version   int       `json:"v"`
-	Key       string    `json:"key"`
-	SpooledAt time.Time `json:"spooled_at"`
-	Reason    string    `json:"reason,omitempty"`
+	RequestID                string                    `json:"request_id,omitempty"`
+	Attempt                  int64                     `json:"attempt,omitempty"`
+	FailureStage             string                    `json:"failure_stage,omitempty"`
+	RequestOutcome           *coreusage.RequestOutcome `json:"request_outcome,omitempty"`
+	UpstreamProtocol         string                    `json:"upstream_protocol,omitempty"`
+	UpstreamTransportGroup   string                    `json:"upstream_transport_group,omitempty"`
+	UpstreamTransportKind    string                    `json:"upstream_transport_kind,omitempty"`
+	UpstreamConnectionID     string                    `json:"upstream_connection_id,omitempty"`
+	UpstreamConnectionReused *bool                     `json:"upstream_connection_reused,omitempty"`
+	UpstreamErrorStage       string                    `json:"upstream_error_stage,omitempty"`
+	Version                  int                       `json:"v"`
+	Key                      string                    `json:"key"`
+	SpooledAt                time.Time                 `json:"spooled_at"`
+	Reason                   string                    `json:"reason,omitempty"`
 	// CommitUncertainAt is when an attempt of this record last lost its
 	// COMMIT reply; a duplicate found before the settle window has passed is
 	// checked again rather than trusted.
@@ -98,6 +109,9 @@ type usageSpoolTokens struct {
 // database would have refused to keep.
 func encodeUsageSpoolRecord(entry RequestLogEntry, reason usageSpoolReason, commitUncertainAt, now time.Time) ([]byte, error) {
 	record := usageSpoolRecord{
+		RequestID: entry.RequestID, Attempt: entry.Attempt, FailureStage: entry.FailureStage, RequestOutcome: entry.RequestOutcome,
+		UpstreamProtocol: entry.UpstreamProtocol, UpstreamTransportGroup: entry.UpstreamTransportGroup, UpstreamTransportKind: entry.UpstreamTransportKind,
+		UpstreamConnectionID: entry.UpstreamConnectionID, UpstreamConnectionReused: entry.UpstreamConnectionReused, UpstreamErrorStage: entry.UpstreamErrorStage,
 		Version:               usageSpoolRecordVersion,
 		Key:                   entry.IdempotencyKey,
 		SpooledAt:             now.UTC(),
@@ -190,6 +204,9 @@ func decodeUsageSpoolRecord(line []byte) (RequestLogEntry, usageSpoolRecord, err
 		return RequestLogEntry{}, record, fmt.Errorf("%w: missing idempotency key", errUsageSpoolRecordInvalid)
 	}
 	entry := RequestLogEntry{
+		RequestID: record.RequestID, Attempt: record.Attempt, FailureStage: record.FailureStage, RequestOutcome: record.RequestOutcome,
+		UpstreamProtocol: record.UpstreamProtocol, UpstreamTransportGroup: record.UpstreamTransportGroup, UpstreamTransportKind: record.UpstreamTransportKind,
+		UpstreamConnectionID: record.UpstreamConnectionID, UpstreamConnectionReused: record.UpstreamConnectionReused, UpstreamErrorStage: record.UpstreamErrorStage,
 		IdempotencyKey:        record.Key,
 		TrustedTenantID:       record.TrustedTenantID,
 		APIKey:                record.APIKey,

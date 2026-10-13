@@ -19,6 +19,10 @@ import (
 // New columns now go here instead of adding another wrapper and another word to
 // that name. The legacy wrappers are retained below for existing callers.
 type RequestLogEntry struct {
+	RequestID      string
+	Attempt        int64
+	FailureStage   string
+	RequestOutcome *coreusage.RequestOutcome
 	// IdempotencyKey makes the write exactly-once: a retry or spool replay of
 	// an entry whose earlier attempt already committed is skipped. Records from
 	// the usage queue carry the key assigned when they were published;
@@ -40,9 +44,15 @@ type RequestLogEntry struct {
 	UpstreamModel string
 	// UpstreamResponseModel is what the upstream declared in its own response,
 	// recorded for auditing only. See the executor's upstream response observer.
-	UpstreamResponseModel string
-	VisionFallbackModel   string
-	ThinkingLevel         string
+	UpstreamResponseModel    string
+	UpstreamProtocol         string
+	UpstreamTransportGroup   string
+	UpstreamTransportKind    string
+	UpstreamConnectionID     string
+	UpstreamConnectionReused *bool
+	UpstreamErrorStage       string
+	VisionFallbackModel      string
+	ThinkingLevel            string
 
 	Source      string
 	ChannelName string
@@ -90,15 +100,17 @@ func insertRequestLogRowTx(tx usageWriteTx, plan requestLogWritePlan) error {
 
 	insertSQL := `INSERT INTO request_logs
 		(tenant_id, timestamp, api_key, api_key_id, auth_subject_id, api_key_name, model, thinking_level, upstream_model, upstream_response_model, vision_fallback_model, source, channel_name, auth_index,
-		 failed, streaming, latency_ms, first_token_ms, input_tokens, output_tokens, reasoning_tokens, cached_tokens, total_tokens, cost)
-	 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		 failed, streaming, latency_ms, first_token_ms, input_tokens, output_tokens, reasoning_tokens, cached_tokens, total_tokens, cost, request_id, attempt, failure_stage,
+		 upstream_protocol, upstream_transport_group, upstream_transport_kind, upstream_connection_id, upstream_connection_reused, upstream_error_stage)
+	 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 	insertArgs := []any{
 		plan.tenantID, entry.Timestamp.UTC().Format(time.RFC3339Nano),
 		entry.APIKey, entry.APIKeyID, entry.AuthSubjectID, entry.APIKeyName, entry.Model, entry.ThinkingLevel,
 		entry.UpstreamModel, entry.UpstreamResponseModel, entry.VisionFallbackModel, entry.Source, entry.ChannelName, entry.AuthIndex,
 		failedInt, streamingInt, entry.LatencyMs, entry.FirstTokenMs,
 		entry.Tokens.InputTokens, entry.Tokens.OutputTokens, entry.Tokens.ReasoningTokens,
-		entry.Tokens.CachedTokens, entry.Tokens.TotalTokens, plan.cost,
+		entry.Tokens.CachedTokens, entry.Tokens.TotalTokens, plan.cost, entry.RequestID, entry.Attempt, entry.FailureStage,
+		entry.UpstreamProtocol, entry.UpstreamTransportGroup, entry.UpstreamTransportKind, entry.UpstreamConnectionID, entry.UpstreamConnectionReused, entry.UpstreamErrorStage,
 	}
 
 	if !plan.storeContent {
@@ -132,6 +144,11 @@ func insertRequestLogRowTx(tx usageWriteTx, plan requestLogWritePlan) error {
 // carries an idempotency key before its first attempt, so every retry and
 // replay of it shares that key.
 func normalizeRequestLogEntry(entry RequestLogEntry) RequestLogEntry {
+	if entry.RequestOutcome != nil {
+		// Lifecycle records never bill tokens, call TPM hooks, or spool bodies.
+		entry.Tokens = TokenStats{}
+		entry.InputContent, entry.OutputContent, entry.DetailContent = "", "", ""
+	}
 	entry.IdempotencyKey = strings.TrimSpace(entry.IdempotencyKey)
 	if entry.IdempotencyKey == "" {
 		entry.IdempotencyKey = coreusage.NewIdempotencyKey()

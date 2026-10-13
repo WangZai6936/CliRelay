@@ -105,6 +105,9 @@ type Result struct {
 	Model string
 	// Success marks whether the execution succeeded.
 	Success bool
+	// StartedAt identifies the upstream attempt, so an older successful stream
+	// cannot erase a cooldown established by a newer failed attempt.
+	StartedAt time.Time
 	// RetryAfter carries a provider supplied retry hint (e.g. 429 retryDelay).
 	RetryAfter *time.Duration
 	// Headers carries upstream response headers used for provider-specific
@@ -171,6 +174,8 @@ type Manager struct {
 	// Retry controls request retry behavior.
 	requestRetry     atomic.Int32
 	maxRetryInterval atomic.Int64
+	// overloadRecovery is runtime-only, guarded by mu, and keyed by auth/model.
+	overloadRecovery map[string]*overloadRecoveryState
 
 	// accountConcurrencyWait is how long a request may queue for a saturated
 	// account before failing, in nanoseconds. Zero disables queuing.

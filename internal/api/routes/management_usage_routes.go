@@ -11,6 +11,7 @@ func registerManagementUsageRoutes(group *gin.RouterGroup, h *managementhandlers
 	group.GET("/usage/export", h.ExportUsageStatistics)
 	group.POST("/usage/import", h.ImportUsageStatistics)
 	group.GET("/usage/logs", usageLogs.GetUsageLogs)
+	group.GET("/request-outcomes", usageLogs.GetRequestOutcomes)
 	group.DELETE("/usage/logs", usageLogs.DeleteUsageLogs)
 	group.GET("/usage/logs/:id/content", usageLogs.GetLogContent)
 	group.GET("/usage/logs/:id/egress", h.GetUsageLogEgress)

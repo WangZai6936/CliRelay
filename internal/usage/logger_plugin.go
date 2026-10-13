@@ -320,6 +320,12 @@ func (s *RequestStatistics) Record(ctx context.Context, record coreusage.Record)
 // record. It never touches the database, so the queue-overflow path can run it
 // on the request goroutine; the write resolves the key's current name itself.
 func (s *RequestStatistics) ingest(ctx context.Context, record coreusage.Record) RequestLogEntry {
+	if record.RequestOutcome != nil {
+		return RequestLogEntry{IdempotencyKey: record.IdempotencyKey, TrustedTenantID: record.TrustedTenantID,
+			APIKey: record.APIKey, APIKeyID: record.APIKeyID, APIKeyName: record.APIKeyName, Model: record.Model,
+			AuthIndex: record.AuthIndex, AuthSubjectID: record.AuthSubjectID, ChannelName: record.ChannelName,
+			Timestamp: record.RequestedAt, RequestOutcome: record.RequestOutcome}
+	}
 	timestamp := record.RequestedAt
 	if timestamp.IsZero() {
 		timestamp = time.Now()
@@ -391,29 +397,38 @@ func (s *RequestStatistics) ingest(ctx context.Context, record coreusage.Record)
 	outputContent := resolveDeferredUsageContent(record.OutputContent, record.OutputContentPath)
 	detailContent := resolveDeferredUsageContent(record.DetailContent, record.DetailContentPath)
 	return RequestLogEntry{
-		IdempotencyKey:        record.IdempotencyKey,
-		TrustedTenantID:       record.TrustedTenantID,
-		APIKey:                statsKey,
-		APIKeyID:              strings.TrimSpace(record.APIKeyID),
-		AuthSubjectID:         record.AuthSubjectID,
-		APIKeyName:            strings.TrimSpace(record.APIKeyName),
-		Model:                 modelName,
-		UpstreamModel:         record.UpstreamModel,
-		UpstreamResponseModel: record.UpstreamResponseModel,
-		VisionFallbackModel:   record.VisionFallbackModel,
-		ThinkingLevel:         record.ThinkingLevel,
-		Source:                record.Source,
-		ChannelName:           record.ChannelName,
-		AuthIndex:             record.AuthIndex,
-		Failed:                failed,
-		Streaming:             record.Streaming,
-		Timestamp:             timestamp,
-		LatencyMs:             record.LatencyMs,
-		FirstTokenMs:          record.FirstTokenMs,
-		Tokens:                detail,
-		InputContent:          inputContent,
-		OutputContent:         outputContent,
-		DetailContent:         detailContent,
+		RequestID:                record.RequestCorrelationID,
+		Attempt:                  record.Attempt,
+		FailureStage:             record.FailureStage,
+		IdempotencyKey:           record.IdempotencyKey,
+		TrustedTenantID:          record.TrustedTenantID,
+		APIKey:                   statsKey,
+		APIKeyID:                 strings.TrimSpace(record.APIKeyID),
+		AuthSubjectID:            record.AuthSubjectID,
+		APIKeyName:               strings.TrimSpace(record.APIKeyName),
+		Model:                    modelName,
+		UpstreamModel:            record.UpstreamModel,
+		UpstreamResponseModel:    record.UpstreamResponseModel,
+		UpstreamProtocol:         record.UpstreamProtocol,
+		UpstreamTransportGroup:   record.UpstreamTransportGroup,
+		UpstreamTransportKind:    record.UpstreamTransportKind,
+		UpstreamConnectionID:     record.UpstreamConnectionID,
+		UpstreamConnectionReused: record.UpstreamConnectionReused,
+		UpstreamErrorStage:       record.UpstreamErrorStage,
+		VisionFallbackModel:      record.VisionFallbackModel,
+		ThinkingLevel:            record.ThinkingLevel,
+		Source:                   record.Source,
+		ChannelName:              record.ChannelName,
+		AuthIndex:                record.AuthIndex,
+		Failed:                   failed,
+		Streaming:                record.Streaming,
+		Timestamp:                timestamp,
+		LatencyMs:                record.LatencyMs,
+		FirstTokenMs:             record.FirstTokenMs,
+		Tokens:                   detail,
+		InputContent:             inputContent,
+		OutputContent:            outputContent,
+		DetailContent:            detailContent,
 	}
 }
 

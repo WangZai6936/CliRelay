@@ -20,6 +20,11 @@ func newCodexStatusErr(statusCode int, body []byte, headers ...http.Header) stat
 	if len(headers) > 0 {
 		header = headers[0]
 	}
+	if statusCode >= http.StatusInternalServerError {
+		if retryAfter := parseHTTPRetryAfterHeader(header, time.Now()); retryAfter != nil {
+			err.retryAfter = retryAfter
+		}
+	}
 	if window, minutes := parseCodexQuotaWindow(statusCode, body, header); window != "" {
 		err.quotaWindow = window
 		err.quotaWindowMinutes = minutes

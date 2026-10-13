@@ -3,10 +3,12 @@ package handlers
 import (
 	"context"
 	"errors"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	"net/http"
+	"time"
 
+	coreauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
+	"github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/usage"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator"
 )
 
@@ -31,6 +33,15 @@ func (h *BaseAPIHandler) StartStreamWithAuthManager(ctx context.Context, handler
 	providers, normalizedModel, errMsg := h.getRequestDetails(ctx, modelName)
 	if errMsg != nil {
 		return nil, nil, nil, errMsg
+	}
+	maxBootstrapRetries := StreamingBootstrapRetries(h.Cfg)
+	if h.Cfg != nil && h.Cfg.Streaming.MaxAttempts > 0 {
+		timeout := h.Cfg.Streaming.RecoveryTimeoutSeconds
+		if timeout <= 0 {
+			timeout = 20
+		}
+		ctx = coreauth.WithRequestRecoveryBudget(ctx, h.Cfg.Streaming.MaxAttempts, time.Duration(timeout)*time.Second)
+		maxBootstrapRetries = h.Cfg.Streaming.MaxAttempts - 1
 	}
 	reqMeta := requestExecutionMetadata(ctx)
 	reqMeta[coreexecutor.RequestedModelMetadataKey] = normalizedModel
@@ -59,6 +70,7 @@ func (h *BaseAPIHandler) StartStreamWithAuthManager(ctx context.Context, handler
 		}
 	}
 	if err != nil {
+		usage.MarkRequestFailed(ctx)
 		status := http.StatusInternalServerError
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			status = 499 // Client Closed Request
@@ -90,7 +102,6 @@ func (h *BaseAPIHandler) StartStreamWithAuthManager(ctx context.Context, handler
 	errChan := make(chan *StreamErrorMessage, 1)
 	// Capture retry budget before the goroutine so the no-retry path does not close
 	// over req/opts (those hold multi-MB inbound bodies for the whole SSE lifetime).
-	maxBootstrapRetries := StreamingBootstrapRetries(h.Cfg)
 	if maxBootstrapRetries <= 0 && (h.Cfg == nil || h.Cfg.TextModelFallback == "") {
 		go forwardStreamWithoutBootstrapRetry(ctx, handlerType, chunks, dataChan, errChan)
 	} else {
@@ -128,6 +139,7 @@ func forwardStreamWithoutBootstrapRetry(
 			return
 		}
 		if chunk.Err != nil {
+			usage.MarkRequestFailed(ctx)
 			_ = sendStreamErr(ctx, errChan, streamErrorMessageFromErr(chunk.Err))
 			return
 		}
@@ -136,10 +148,13 @@ func forwardStreamWithoutBootstrapRetry(
 		}
 		if handlerType == "openai-response" {
 			if err := validateSSEDataJSON(chunk.Payload); err != nil {
+				usage.MarkRequestFailed(ctx)
 				_ = sendStreamErr(ctx, errChan, &StreamErrorMessage{StatusCode: http.StatusBadGateway, Error: err})
 				return
 			}
 		}
+		coreauth.RecoveryBudgetFromContext(ctx).MarkOutput()
+		markMeaningfulStreamOutput(ctx, chunk.Payload)
 		if !sendStreamData(ctx, dataChan, cloneBytes(chunk.Payload)) {
 			return
 		}
@@ -194,7 +209,7 @@ outer:
 				// retry a few times (to allow auth rotation / transient recovery).
 				if !sentPayload && bootstrapRetries < maxBootstrapRetries && bootstrapEligibleStreamErr(streamErr) {
 					bootstrapRetries++
-					retryResult, retryErr := h.AuthManager.ExecuteStream(ctx, providers, req, opts)
+					retryResult, retryErr := h.AuthManager.RecoverStream(ctx, providers, req, opts, streamErr)
 					if retryErr == nil {
 						if passthroughHeadersEnabled {
 							replaceHeader(upstreamHeaders, FilterUpstreamHeaders(retryResult.Headers))
@@ -204,6 +219,7 @@ outer:
 					}
 					streamErr = retryErr
 				}
+				usage.MarkRequestFailed(ctx)
 				_ = sendStreamErr(ctx, errChan, streamErrorMessageFromErr(streamErr))
 				return
 			}
@@ -212,11 +228,14 @@ outer:
 			}
 			if handlerType == "openai-response" {
 				if err := validateSSEDataJSON(chunk.Payload); err != nil {
+					usage.MarkRequestFailed(ctx)
 					_ = sendStreamErr(ctx, errChan, &StreamErrorMessage{StatusCode: http.StatusBadGateway, Error: err})
 					return
 				}
 			}
 			sentPayload = true
+			coreauth.RecoveryBudgetFromContext(ctx).MarkOutput()
+			markMeaningfulStreamOutput(ctx, chunk.Payload)
 			req.Payload = nil
 			opts.OriginalRequest = nil
 			if !sendStreamData(ctx, dataChan, cloneBytes(chunk.Payload)) {
@@ -266,7 +285,7 @@ func sendStreamData(ctx context.Context, dataChan chan<- []byte, chunk []byte) b
 }
 
 func bootstrapEligibleStreamErr(err error) bool {
-	if util.IsUpstreamRequestBufferLimit(err) {
+	if coreexecutor.IsUpstreamRequestBufferLimit(err) {
 		return false
 	}
 	status := statusFromError(err)

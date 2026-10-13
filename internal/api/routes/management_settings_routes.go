@@ -70,6 +70,8 @@ func registerManagementSettingsRoutes(group *gin.RouterGroup, h *managementhandl
 }
 
 func registerManagementRuntimeTuningRoutes(group *gin.RouterGroup, h *managementhandlers.Handler) {
+	group.GET("/codex-http-transport", h.GetCodexHTTPTransport)
+	group.PUT("/codex-http-transport", h.PutCodexHTTPTransport)
 	group.GET("/request-retry", h.GetRequestRetry)
 	group.PUT("/request-retry", h.PutRequestRetry)
 	group.PATCH("/request-retry", h.PutRequestRetry)

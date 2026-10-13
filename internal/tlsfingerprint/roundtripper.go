@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"strings"
@@ -39,6 +40,9 @@ type Options struct {
 	// CACertPath adds a PEM bundle as the trust root, for the same inspection
 	// proxy setups. Empty uses the system pool.
 	CACertPath string
+	// ForceHTTP1 changes only ALPN and uses a persistent HTTP/1 connection
+	// pool. The remaining ClientHello profile and egress settings are retained.
+	ForceHTTP1 bool
 }
 
 const defaultDialTimeout = 30 * time.Second
@@ -87,7 +91,10 @@ type RoundTripper struct {
 	h2Conns map[string]*http2.ClientConn
 	// dialing serializes connection setup per host so a burst of requests to a
 	// cold host opens one connection instead of one per request.
-	dialing map[string]*sync.Cond
+	dialing   map[string]*sync.Cond
+	http1     *http.Transport
+	h2Sockets map[*http2.ClientConn]net.Conn
+	h2Used    map[*http2.ClientConn]bool
 }
 
 // New builds a RoundTripper for the given options. It returns an error for an
@@ -126,13 +133,37 @@ func New(opts Options) (*RoundTripper, error) {
 		}
 	}
 
-	return &RoundTripper{
-		opts:    opts,
-		helloID: helloID,
-		rootCAs: rootCAs,
-		h2Conns: make(map[string]*http2.ClientConn),
-		dialing: make(map[string]*sync.Cond),
-	}, nil
+	t := &RoundTripper{
+		opts:      opts,
+		helloID:   helloID,
+		rootCAs:   rootCAs,
+		h2Conns:   make(map[string]*http2.ClientConn),
+		dialing:   make(map[string]*sync.Cond),
+		h2Sockets: make(map[*http2.ClientConn]net.Conn),
+		h2Used:    make(map[*http2.ClientConn]bool),
+	}
+	if opts.ForceHTTP1 {
+		protocols := new(http.Protocols)
+		protocols.SetHTTP1(true)
+		t.http1 = &http.Transport{
+			Protocols:    protocols,
+			MaxIdleConns: 100, MaxIdleConnsPerHost: 20,
+			IdleConnTimeout: 90 * time.Second,
+			DialTLSContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
+				host, _, err := net.SplitHostPort(addr)
+				if err != nil {
+					return nil, err
+				}
+				conn, err := t.dialTLS(ctx, host, addr)
+				if err == nil && conn.ConnectionState().NegotiatedProtocol == http2.NextProtoTLS {
+					_ = conn.Close()
+					return nil, errors.New("tlsfingerprint: peer selected HTTP/2 for HTTP/1-only transport")
+				}
+				return conn, err
+			},
+		}
+	}
+	return t, nil
 }
 
 // RoundTrip implements http.RoundTripper.
@@ -145,15 +176,30 @@ func (t *RoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		// fingerprint and no reason for this transport to handle them.
 		return nil, fmt.Errorf("tlsfingerprint: scheme %q is not supported, want https", req.URL.Scheme)
 	}
+	if t.http1 != nil {
+		return t.http1.RoundTrip(req)
+	}
 
 	host := req.URL.Hostname()
 	addr := canonicalAddr(req.URL)
+	trace := httptrace.ContextClientTrace(req.Context())
+	if trace != nil && trace.GetConn != nil {
+		trace.GetConn(addr)
+	}
 
 	h2Conn, err := t.h2ConnFor(req.Context(), host, addr)
 	if err != nil {
 		return nil, err
 	}
 	if h2Conn != nil {
+		t.mu.Lock()
+		socket := t.h2Sockets[h2Conn]
+		reused := t.h2Used[h2Conn]
+		t.h2Used[h2Conn] = true
+		t.mu.Unlock()
+		if trace != nil && trace.GotConn != nil && socket != nil {
+			trace.GotConn(httptrace.GotConnInfo{Conn: socket, Reused: reused})
+		}
 		resp, errRT := h2Conn.RoundTrip(req)
 		if errRT != nil {
 			t.dropH2Conn(host, h2Conn)
@@ -180,6 +226,8 @@ func (t *RoundTripper) h2ConnFor(ctx context.Context, host, addr string) (*http2
 				return conn, nil
 			}
 			delete(t.h2Conns, host)
+			delete(t.h2Sockets, conn)
+			delete(t.h2Used, conn)
 		}
 		cond, inFlight := t.dialing[host]
 		if !inFlight {
@@ -230,6 +278,9 @@ func (t *RoundTripper) dialH2(ctx context.Context, host, addr string) (*http2.Cl
 		_ = tlsConn.Close()
 		return nil, err
 	}
+	t.mu.Lock()
+	t.h2Sockets[h2Conn] = tlsConn
+	t.mu.Unlock()
 	return h2Conn, nil
 }
 
@@ -252,9 +303,36 @@ func (t *RoundTripper) dialTLS(ctx context.Context, host, addr string) (*utls.UC
 		InsecureSkipVerify: t.opts.InsecureSkipVerify,
 		RootCAs:            t.rootCAs,
 	}, t.helloID)
+	if t.opts.ForceHTTP1 {
+		if err = tlsConn.BuildHandshakeState(); err != nil {
+			_ = rawConn.Close()
+			return nil, err
+		}
+		found := false
+		for _, extension := range tlsConn.Extensions {
+			if alpn, ok := extension.(*utls.ALPNExtension); ok {
+				alpn.AlpnProtocols = []string{"http/1.1"}
+				found = true
+			}
+		}
+		if !found {
+			tlsConn.Extensions = append(tlsConn.Extensions, &utls.ALPNExtension{AlpnProtocols: []string{"http/1.1"}})
+		}
+	}
+	trace := httptrace.ContextClientTrace(ctx)
+	if trace != nil && trace.TLSHandshakeStart != nil {
+		trace.TLSHandshakeStart()
+	}
 	if err = tlsConn.HandshakeContext(ctx); err != nil {
+		if trace != nil && trace.TLSHandshakeDone != nil {
+			trace.TLSHandshakeDone(tls.ConnectionState{}, err)
+		}
 		_ = rawConn.Close()
 		return nil, err
+	}
+	if trace != nil && trace.TLSHandshakeDone != nil {
+		state := tlsConn.ConnectionState()
+		trace.TLSHandshakeDone(tls.ConnectionState{NegotiatedProtocol: state.NegotiatedProtocol, Version: state.Version, HandshakeComplete: state.HandshakeComplete}, nil)
 	}
 	// Clear the handshake deadline: streaming responses must not inherit it.
 	_ = rawConn.SetDeadline(time.Time{})
@@ -422,17 +500,24 @@ func (t *RoundTripper) dropH2Conn(host string, conn *http2.ClientConn) {
 	if cached, ok := t.h2Conns[host]; ok && cached == conn {
 		delete(t.h2Conns, host)
 	}
+	delete(t.h2Sockets, conn)
+	delete(t.h2Used, conn)
 	t.mu.Unlock()
 }
 
 // CloseIdleConnections implements the optional http.Transport behaviour used by
 // http.Client.CloseIdleConnections.
 func (t *RoundTripper) CloseIdleConnections() {
+	if t.http1 != nil {
+		t.http1.CloseIdleConnections()
+	}
 	t.mu.Lock()
 	conns := make([]*http2.ClientConn, 0, len(t.h2Conns))
 	for host, conn := range t.h2Conns {
 		conns = append(conns, conn)
 		delete(t.h2Conns, host)
+		delete(t.h2Sockets, conn)
+		delete(t.h2Used, conn)
 	}
 	t.mu.Unlock()
 	for _, conn := range conns {

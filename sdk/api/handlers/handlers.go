@@ -25,6 +25,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
+	requestusage "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/usage"
 	"github.com/router-for-me/CLIProxyAPI/v6/sdk/config"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator"
 )
@@ -519,6 +520,8 @@ func (h *BaseAPIHandler) GetContextWithCancel(handler interfaces.APIHandler, c *
 			parentCtx = logging.WithRequestID(parentCtx, requestID)
 		}
 	}
+	parentCtx = requestusage.WithRequestTracker(parentCtx, requestCtx)
+	parentCtx = inheritRequestDiagnostics(parentCtx, requestCtx, c, logging.GetRequestID(parentCtx))
 	newCtx, cancel := context.WithCancel(parentCtx)
 	if requestCtx != nil && requestCtx != parentCtx {
 		go func() {
@@ -530,45 +533,8 @@ func (h *BaseAPIHandler) GetContextWithCancel(handler interfaces.APIHandler, c *
 		}()
 	}
 	newCtx = context.WithValue(newCtx, util.ContextKeyGin, c)
-	return newCtx, func(params ...interface{}) {
-		if h.Cfg.RequestLog && len(params) == 1 {
-			if existing, exists := c.Get("API_RESPONSE"); exists {
-				if existingBytes, ok := existing.([]byte); ok && len(bytes.TrimSpace(existingBytes)) > 0 {
-					switch params[0].(type) {
-					case error, string:
-						cancel()
-						return
-					}
-				}
-			}
-
-			var payload []byte
-			switch data := params[0].(type) {
-			case []byte:
-				payload = data
-			case error:
-				if data != nil {
-					payload = []byte(data.Error())
-				}
-			case string:
-				payload = []byte(data)
-			}
-			if len(payload) > 0 {
-				if existing, exists := c.Get("API_RESPONSE"); exists {
-					if existingBytes, ok := existing.([]byte); ok && len(existingBytes) > 0 {
-						trimmedPayload := bytes.TrimSpace(payload)
-						if len(trimmedPayload) > 0 && bytes.Contains(existingBytes, trimmedPayload) {
-							cancel()
-							return
-						}
-					}
-				}
-				appendAPIResponse(c, payload)
-			}
-		}
-
-		cancel()
-	}
+	observeRequestDelivery(c, newCtx)
+	return newCtx, h.requestDeliveryCancel(c, newCtx, cancel)
 }
 
 // StartNonStreamingKeepAlive emits blank lines every 5 seconds while waiting for a non-streaming response.
@@ -876,6 +842,10 @@ func splitRequestedModelPrefix(modelName string) (string, string) {
 }
 
 func (h *BaseAPIHandler) getRequestDetails(ctx context.Context, modelName string) (providers []string, normalizedModel string, err *interfaces.ErrorMessage) {
+	if ctx != nil {
+		ginCtx, _ := ctx.Value(util.ContextKeyGin).(*gin.Context)
+		observeAuthenticatedRequestIdentity(ginCtx, ctx, modelName)
+	}
 	var resolvedModelName string
 	initialSuffix := thinking.ParseSuffix(modelName)
 	if initialSuffix.ModelName == "auto" {

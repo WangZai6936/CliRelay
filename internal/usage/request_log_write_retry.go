@@ -372,13 +372,20 @@ func writeRequestLogAttempt(entry RequestLogEntry, timeout time.Duration) (reque
 		result.duplicate = true
 		return result, nil
 	}
-	if err := insertRequestLogRowTx(tx, plan); err != nil {
+	if plan.entry.RequestOutcome != nil {
+		if err := insertRequestOutcomeTx(tx, plan); err != nil {
+			_ = tx.Rollback()
+			return result, err
+		}
+	} else if err := insertRequestLogRowTx(tx, plan); err != nil {
 		_ = tx.Rollback()
 		return result, err
 	}
-	if err := projectLogWriteTx(tx, plan.rollupEvent()); err != nil {
-		_ = tx.Rollback()
-		return result, err
+	if plan.entry.RequestOutcome == nil {
+		if err := projectLogWriteTx(tx, plan.rollupEvent()); err != nil {
+			_ = tx.Rollback()
+			return result, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		if isTransientDBError(err) {

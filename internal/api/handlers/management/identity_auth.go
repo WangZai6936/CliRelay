@@ -592,7 +592,7 @@ func isTenantScopedManagementPath(path string) bool {
 	// credential file itself is valid.
 	case relative == "/api-call":
 		return true
-	case relative == "/usage/logs",
+	case relative == "/usage/logs", relative == "/request-outcomes",
 		(strings.HasSuffix(relative, "/content") || strings.HasSuffix(relative, "/egress")) && strings.HasPrefix(relative, "/usage/logs/"),
 		relative == "/usage/chart-data",
 		relative == "/usage/entity-stats",

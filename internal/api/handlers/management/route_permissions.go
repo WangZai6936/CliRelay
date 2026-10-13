@@ -112,7 +112,7 @@ func permissionForManagementRequest(method, path string) string {
 			return "system.logs.delete"
 		}
 		return "system.logs.read"
-	case strings.HasPrefix(relative, "/usage/logs"):
+	case relative == "/request-outcomes", strings.HasPrefix(relative, "/usage/logs"):
 		if method == http.MethodDelete {
 			return "request_logs.delete"
 		}
@@ -235,6 +235,11 @@ func permissionForManagementRequest(method, path string) string {
 		}
 		return "system.config.read"
 	// Process-global config knobs (explicit so default stays fail-closed).
+	case relative == "/codex-http-transport":
+		if write {
+			return "system.config.write"
+		}
+		return "system.config.read"
 	case relative == "/config":
 		return "tenant_settings.read"
 	case relative == "/debug", relative == "/logging-to-file", relative == "/logs-max-total-size-mb",

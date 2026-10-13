@@ -25,6 +25,7 @@ type tlsFingerprintTransportKey struct {
 	// certificate produces a new transport instead of reusing one pinned to the
 	// old trust root.
 	caCertStat string
+	forceHTTP1 bool
 }
 
 var tlsFingerprintTransports = struct {
@@ -60,6 +61,10 @@ func codexTLSFingerprintConfig(cfg *config.Config, auth *cliproxyauth.Auth) (con
 // the standard transport: a misconfigured profile must not take upstream
 // traffic down, it only means the ClientHello stays the Go default.
 func tlsFingerprintRoundTripper(cfg *config.Config, auth *cliproxyauth.Auth, proxyURL string) http.RoundTripper {
+	return tlsFingerprintProtocolRoundTripper(cfg, auth, proxyURL, false)
+}
+
+func tlsFingerprintProtocolRoundTripper(cfg *config.Config, auth *cliproxyauth.Auth, proxyURL string, forceHTTP1 bool) http.RoundTripper {
 	tlsCfg, ok := codexTLSFingerprintConfig(cfg, auth)
 	if !ok {
 		return nil
@@ -70,8 +75,9 @@ func tlsFingerprintRoundTripper(cfg *config.Config, auth *cliproxyauth.Auth, pro
 		profile = tlsfingerprint.DefaultProfile
 	}
 	key := tlsFingerprintTransportKey{
-		profile:  profile,
-		proxyURL: strings.TrimSpace(proxyURL),
+		profile:    profile,
+		proxyURL:   strings.TrimSpace(proxyURL),
+		forceHTTP1: forceHTTP1,
 	}
 	// The fingerprint transport does its own TLS, so it has to honour the same
 	// trust settings the standard transport applies via util.ApplyTLSConfig;
@@ -96,6 +102,7 @@ func tlsFingerprintRoundTripper(cfg *config.Config, auth *cliproxyauth.Auth, pro
 		PreferIPv4:         key.preferIPv4,
 		InsecureSkipVerify: key.insecureSkipVerify,
 		CACertPath:         key.caCert,
+		ForceHTTP1:         key.forceHTTP1,
 	})
 	if err != nil {
 		log.WithError(err).Warn("tls fingerprint: falling back to the default transport")

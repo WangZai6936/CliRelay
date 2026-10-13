@@ -4,17 +4,27 @@ import "time"
 
 // LogRow represents a single request log entry returned by QueryLogs.
 type LogRow struct {
-	ID                 int64     `json:"id"`
-	Timestamp          time.Time `json:"timestamp"`
-	APIKey             string    `json:"api_key"`
-	APIKeyID           string    `json:"api_key_id,omitempty"`
-	APIKeyMasked       string    `json:"api_key_masked,omitempty"`
-	APIKeyName         string    `json:"api_key_name"`
-	APIKeyOwnName      string    `json:"api_key_own_name,omitempty"`
-	EndUserDisplayName string    `json:"end_user_display_name,omitempty"`
-	Model              string    `json:"model"`
-	ThinkingLevel      string    `json:"thinking_level"`
-	UpstreamModel      string    `json:"upstream_model,omitempty"`
+	RequestID                string    `json:"request_id,omitempty"`
+	Attempt                  int64     `json:"attempt,omitempty"`
+	FailureStage             string    `json:"failure_stage,omitempty"`
+	RequestOutcome           string    `json:"request_outcome"`
+	UpstreamProtocol         string    `json:"upstream_protocol,omitempty"`
+	UpstreamTransportGroup   string    `json:"upstream_transport_group,omitempty"`
+	UpstreamTransportKind    string    `json:"upstream_transport_kind,omitempty"`
+	UpstreamConnectionID     string    `json:"upstream_connection_id,omitempty"`
+	UpstreamConnectionReused *bool     `json:"upstream_connection_reused,omitempty"`
+	UpstreamErrorStage       string    `json:"upstream_error_stage,omitempty"`
+	ID                       int64     `json:"id"`
+	Timestamp                time.Time `json:"timestamp"`
+	APIKey                   string    `json:"api_key"`
+	APIKeyID                 string    `json:"api_key_id,omitempty"`
+	APIKeyMasked             string    `json:"api_key_masked,omitempty"`
+	APIKeyName               string    `json:"api_key_name"`
+	APIKeyOwnName            string    `json:"api_key_own_name,omitempty"`
+	EndUserDisplayName       string    `json:"end_user_display_name,omitempty"`
+	Model                    string    `json:"model"`
+	ThinkingLevel            string    `json:"thinking_level"`
+	UpstreamModel            string    `json:"upstream_model,omitempty"`
 	// UpstreamResponseModel is the model the upstream declared in its own
 	// response; empty when it declared none.
 	UpstreamResponseModel string `json:"upstream_response_model,omitempty"`
@@ -107,12 +117,13 @@ type ChannelFilterOption struct {
 
 // LogStats holds aggregated stats over the filtered result set.
 type LogStats struct {
-	Total         int64   `json:"total"`
-	SuccessRate   float64 `json:"success_rate"`
-	TotalTokens   int64   `json:"total_tokens"`
-	TotalSessions int64   `json:"total_sessions"`
-	TotalCost     float64 `json:"total_cost"`
-	CacheRate     float64 `json:"cache_rate"`
+	RequestOutcomes RequestOutcomeStats `json:"request_outcomes"`
+	Total           int64               `json:"total"`
+	SuccessRate     float64             `json:"success_rate"`
+	TotalTokens     int64               `json:"total_tokens"`
+	TotalSessions   int64               `json:"total_sessions"`
+	TotalCost       float64             `json:"total_cost"`
+	CacheRate       float64             `json:"cache_rate"`
 }
 
 type ClearRequestLogsResult struct {

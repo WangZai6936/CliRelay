@@ -108,13 +108,21 @@ type RequestLogStorageConfig struct {
 
 // StreamingConfig holds server streaming behavior configuration.
 type StreamingConfig struct {
+	// MaxAttempts caps actual upstream calls across HTTP failover and pre-output
+	// SSE recovery, including the first attempt. 0 retains legacy retry budgets.
+	MaxAttempts int `yaml:"max-attempts,omitempty" json:"max-attempts,omitempty"`
+	// RecoveryTimeoutSeconds bounds recovery waits and new attempts starting at
+	// the first failure. It never truncates an established stream. Default: 20
+	// when MaxAttempts is enabled; the client deadline is always respected.
+	RecoveryTimeoutSeconds int `yaml:"recovery-timeout-seconds,omitempty" json:"recovery-timeout-seconds,omitempty"`
 	// KeepAliveSeconds controls how often the server emits SSE heartbeats (": keep-alive\n\n").
 	// < 0 disables keep-alives. Default is 15.
 	KeepAliveSeconds int `yaml:"keepalive-seconds,omitempty" json:"keepalive-seconds,omitempty"`
 
 	// BootstrapRetries controls how many times the server may retry a streaming request before any bytes are sent,
 	// to allow auth rotation / transient recovery.
-	// <= 0 disables bootstrap retries. Default is 0.
+	// <= 0 disables bootstrap retries. Default is 0. When MaxAttempts is enabled,
+	// that shared budget replaces this independent bootstrap count.
 	BootstrapRetries int `yaml:"bootstrap-retries,omitempty" json:"bootstrap-retries,omitempty"`
 }
 

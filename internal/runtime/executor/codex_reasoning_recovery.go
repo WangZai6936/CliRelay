@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 
+	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
 	"github.com/tidwall/gjson"
 )
@@ -114,6 +115,11 @@ func doCodexRequestWithReasoningRecovery(ctx context.Context, client *http.Clien
 	}
 	repaired := filterEncryptedReasoning(body, func(string) bool { return true })
 	if samePayloadStorage(repaired, body) || ctx.Err() != nil {
+		return response, body, nil
+	}
+	if errBudget := cliproxyauth.ReserveAdditionalRecoveryAttempt(ctx, statusErr{code: http.StatusBadRequest, msg: "invalid_encrypted_content"}); errBudget != nil {
+		// The original response still owns the rejected error. Do not discard it
+		// or report another provider attempt when the shared budget is exhausted.
 		return response, body, nil
 	}
 	// Preserve the rejected attempt in the diagnostic log, without reporting it

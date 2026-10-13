@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/diagnostics"
 	internalusage "github.com/router-for-me/CLIProxyAPI/v6/internal/usage"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
@@ -408,7 +409,7 @@ func (r *usageReporter) publishWithOutcome(ctx context.Context, detail coreusage
 		}
 		firstTokenMs := firstTokenLatencyMsFromContext(ctx, r.requestedAt)
 		apiIdentifier, requestID, responseStatus := usageRequestMetadata(ctx)
-		coreusage.PublishRecord(ctx, coreusage.Record{
+		record := coreusage.Record{
 			Provider:              r.provider,
 			Model:                 r.model,
 			ThinkingLevel:         r.thinkingLevel,
@@ -441,7 +442,9 @@ func (r *usageReporter) publishWithOutcome(ctx context.Context, detail coreusage
 			InputContentPath:      inputPath,
 			OutputContentPath:     outputPath,
 			DetailContentPath:     detailPath,
-		})
+		}
+		attachUpstreamUsageDiagnostics(ctx, &record)
+		coreusage.PublishRecord(ctx, record)
 	})
 }
 
@@ -463,7 +466,7 @@ func (r *usageReporter) ensurePublished(ctx context.Context) {
 		}
 		firstTokenMs := firstTokenLatencyMsFromContext(ctx, r.requestedAt)
 		apiIdentifier, requestID, responseStatus := usageRequestMetadata(ctx)
-		coreusage.PublishRecord(ctx, coreusage.Record{
+		record := coreusage.Record{
 			Provider:              r.provider,
 			Model:                 r.model,
 			ThinkingLevel:         r.thinkingLevel,
@@ -496,8 +499,35 @@ func (r *usageReporter) ensurePublished(ctx context.Context) {
 			InputContentPath:      inputPath,
 			OutputContentPath:     outputPath,
 			DetailContentPath:     detailPath,
-		})
+		}
+		attachUpstreamUsageDiagnostics(ctx, &record)
+		coreusage.PublishRecord(ctx, record)
 	})
+}
+
+// Keep the compact protocol experiment denominator outside body retention.
+// This snapshot contains no headers, prompts, response text or credentials.
+func attachUpstreamUsageDiagnostics(ctx context.Context, record *coreusage.Record) {
+	if record == nil {
+		return
+	}
+	d := diagnostics.FromContext(ctx)
+	if d == nil {
+		d = diagnostics.FromGin(ginContextFrom(ctx))
+	}
+	if d == nil {
+		return
+	}
+	u := d.Snapshot().Upstream
+	if u == nil {
+		return
+	}
+	record.UpstreamProtocol = u.Protocol
+	record.UpstreamTransportGroup = u.TransportGroup
+	record.UpstreamTransportKind = u.TransportKind
+	record.UpstreamConnectionID = u.ConnectionID
+	record.UpstreamConnectionReused = u.ConnectionReused
+	record.UpstreamErrorStage = u.ErrorStage
 }
 
 // discardUnpublishedContent releases files owned by a canceled stream. Once a

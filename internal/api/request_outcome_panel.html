@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>请求结果统计 · CliRelay</title>
+<style>
+:root{color-scheme:light dark;--bg:#f8fafc;--card:#fff;--fg:#1e293b;--muted:#475569;--line:#d8e0eb;--accent:#1d4ed8;--ok:#166534;--bad:#b91c1c;--soft:#f1f5f9}
+@media(prefers-color-scheme:dark){:root{--bg:#101722;--card:#172232;--fg:#e8edf4;--muted:#b3c0d2;--line:#35445a;--accent:#93b4ff;--ok:#86efac;--bad:#fca5a5;--soft:#243246}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif}main{max-width:1320px;margin:auto;padding:32px 24px 64px}a{color:var(--accent)}a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:3px}header{display:flex;justify-content:space-between;align-items:center;gap:20px}h1{font-size:28px;line-height:1.3;margin:12px 0}p{margin:8px 0;color:var(--muted)}.eyebrow{font-size:14px;letter-spacing:.08em;color:var(--muted)}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:24px 0}.card,.panel{background:var(--card);border:1px solid var(--line);border-radius:10px}.card{padding:18px}.card span{color:var(--muted);font-size:14px}.card strong{display:block;font-size:32px;font-variant-numeric:tabular-nums}.card small{color:var(--muted)}.good{color:var(--ok)}.bad{color:var(--bad)}.filters{display:flex;align-items:end;flex-wrap:wrap;gap:12px;padding:18px}label{display:flex;flex-direction:column;gap:5px;font-size:14px;color:var(--muted)}select,input,button{font:inherit;min-height:44px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--fg);padding:8px 12px}button{cursor:pointer;min-width:86px}button:hover:not(:disabled){background:var(--soft)}button:disabled{cursor:default;opacity:.55}.status{padding:12px 18px;border-block:1px solid var(--line);color:var(--muted);font-size:14px}.table-region{overflow:auto}table{border-collapse:collapse;width:100%;font-size:14px;text-align:left}th,td{padding:13px 16px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:500;white-space:nowrap}td{font-variant-numeric:tabular-nums}code{font-family:ui-monospace,Consolas,monospace;font-size:12px;overflow-wrap:anywhere}.badge{display:inline-block;white-space:nowrap;border:1px solid var(--line);border-radius:5px;padding:2px 7px}.pager{display:flex;justify-content:flex-end;align-items:center;gap:12px;padding:16px}.note{font-size:14px;margin-top:18px}.empty{text-align:center;padding:40px 20px}.error{color:var(--bad)}@media(max-width:760px){main{padding:20px 14px}.cards{grid-template-columns:repeat(2,minmax(0,1fr))}header{align-items:start}h1{font-size:24px}.card{padding:14px}.card strong{font-size:28px}.filters>label{flex:1;min-width:130px}.pager{justify-content:space-between}}
+</style>
+</head>
+<body><main>
+<header><div><div class="eyebrow">CLIRELAY / 请求可靠性</div><h1>请求结果统计</h1><p>按一次完整请求查看结果，并保留它经历的上游尝试次数。</p></div><a href="/manage/runtime/request-logs">返回请求日志</a></header>
+<section class="cards" aria-label="请求结果概览">
+<div class="card"><span>直接成功</span><strong id="succeeded_requests">—</strong><small>没有失败尝试的已完成请求</small></div>
+<div class="card"><span>重试后成功</span><strong class="good" id="recovered_requests">—</strong><small>自动恢复的请求</small></div>
+<div class="card"><span>最终失败</span><strong class="bad" id="final_failed_requests">—</strong><small>未恢复的上游错误或断流</small></div>
+<div class="card"><span>上游失败尝试</span><strong id="failed_attempts">—</strong><small>当前已关联请求的失败尝试</small></div>
+<div class="card"><span>客户端取消</span><strong id="client_canceled_requests">—</strong><small>客户端主动中止连接</small></div>
+<div class="card"><span>客户端交付失败</span><strong id="client_delivery_failed_requests">—</strong><small>向客户端写入失败</small></div>
+<div class="card"><span>结果未知</span><strong id="unknown_requests">—</strong><small>尚未结束或缺少终态证据</small></div>
+<div class="card"><span>历史未关联尝试</span><strong id="unknown_legacy_attempts">—</strong><small>历史记录不推断最终失败</small></div>
+</section>
+<section class="panel" aria-label="请求结果列表">
+<form id="filters" class="filters"><label>统计范围<select id="days"><option value="1">1 天</option><option value="7">7 天</option><option value="30">30 天</option></select></label><label>模型<input id="model" placeholder="全部模型" maxlength="200"></label><label>最终结果<select id="result"><option value="">全部结果</option><option value="failed">最终失败</option><option value="recovered">重试后成功</option><option value="succeeded">直接成功</option><option value="client_canceled">客户端取消</option><option value="client_delivery_failed">客户端交付失败</option><option value="unknown">结果未知</option></select></label><button id="refresh" type="submit">刷新</button></form>
+<div id="status" class="status" role="status" aria-live="polite">正在读取请求结果…</div>
+<div class="table-region" role="region" aria-label="请求结果，可横向滚动" tabindex="0"><table><thead><tr><th>开始时间</th><th>模型</th><th>结果</th><th>阶段</th><th>上游尝试</th><th>失败尝试</th><th>请求 ID</th></tr></thead><tbody id="rows"></tbody></table></div>
+<div class="pager"><button id="prev" type="button" disabled>上一页</button><span id="page">第 1 页</span><button id="next" type="button" disabled>下一页</button></div>
+</section>
+<p class="note">统计日期采用服务端日界限。请求结果从本次升级后开始记录；尚未结束或缺少终态的请求显示为未知；历史未关联尝试不代表最终失败。客户端取消和交付失败单独统计。成功表示服务端正常完成写入。</p>
+<p class="note" id="login" hidden>管理会话已过期或尚未登录，请<a href="/manage">返回管理面板登录</a>后重新打开此页。</p>
+</main>
+<script>
+(()=>{
+'use strict';
+const ids=['succeeded_requests','recovered_requests','final_failed_requests','failed_attempts','client_canceled_requests','client_delivery_failed_requests','unknown_requests','unknown_legacy_attempts'];
+const labels={succeeded:'直接成功',recovered:'重试后成功',failed:'最终失败',client_canceled:'客户端取消',client_delivery_failed:'客户端交付失败',unknown:'结果未知'};
+const stage={before_output:'输出前',after_output:'输出中'};
+let page=1,total=0,abort;
+const el=id=>document.getElementById(id);
+function auth(){for(const name of ['sessionStorage','localStorage']){try{const r=JSON.parse(window[name].getItem('code-proxy-admin-auth')||'null');if(!r||typeof r.managementKey!=='string'||!r.managementKey)continue;if(r.expiresAt&&r.expiresAt<=Date.now())continue;if(r.apiBase&&new URL(r.apiBase,location.origin).origin!==location.origin)continue;return r;}catch{}}return null;}
+function cell(row,text,code=false){const td=document.createElement('td');if(code){const x=document.createElement('code');x.textContent=text;td.append(x);}else td.textContent=text;row.append(td);}
+async function load(){
+if(abort)abort.abort();abort=new AbortController();const active=abort;const timeout=setTimeout(()=>active.abort(),15000);el('refresh').disabled=true;el('prev').disabled=true;el('next').disabled=true;el('status').classList.remove('error');el('status').textContent='正在读取请求结果…';el('login').hidden=true;
+try{const a=auth();if(!a){el('login').hidden=false;throw Error('请先登录管理面板。');}
+const params=new URLSearchParams({page:String(page),size:'50',days:el('days').value});if(el('model').value.trim())params.set('model',el('model').value.trim());if(el('result').value)params.set('result',el('result').value);
+const headers={Authorization:'Bearer '+a.managementKey};const tenant=a.effectiveTenantId||localStorage.getItem('code-proxy-effective-tenant');if(tenant)headers['X-Effective-Tenant-ID']=tenant;
+const response=await fetch('/v0/management/request-outcomes?'+params,{headers,signal:active.signal,cache:'no-store'});
+if(response.status===401){el('login').hidden=false;throw Error('管理会话已过期，请重新登录。');}if(response.status===403)throw Error('当前账户没有查看请求日志的权限。');if(!response.ok)throw Error('读取失败（HTTP '+response.status+'），请稍后重试。');
+const data=await response.json();if(active!==abort)return;total=Number(data.total)||0;const stats=data.stats||{};for(const id of ids)el(id).textContent=Number(stats[id]||0).toLocaleString();const body=el('rows');body.replaceChildren();
+for(const r of data.items||[]){const tr=document.createElement('tr');cell(tr,new Date(r.timestamp).toLocaleString('zh-CN',{hour12:false}));cell(tr,r.model||'—');const td=document.createElement('td'),badge=document.createElement('span');badge.className='badge'+(r.result==='failed'?' bad':r.result==='recovered'?' good':'');badge.textContent=labels[r.result]||'结果未知';td.append(badge);tr.append(td);cell(tr,stage[r.failure_stage]||'—');cell(tr,String(r.attempts||0));cell(tr,String(r.failed_attempts||0));cell(tr,r.request_id||'—',true);body.append(tr);}
+if(!body.children.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=7;td.className='empty';td.textContent='当前筛选条件下暂无已完成请求。升级后的请求完成后会显示在这里。';tr.append(td);body.append(tr);}
+el('status').textContent='共 '+total.toLocaleString()+' 个请求 · '+new Date().toLocaleTimeString('zh-CN',{hour12:false})+' 更新';el('page').textContent='第 '+page+' / '+Math.max(1,Math.ceil(total/50))+' 页';el('prev').disabled=page<=1;el('next').disabled=page*50>=total;
+}catch(error){if(active!==abort)return;el('status').classList.add('error');el('status').textContent=error.name==='AbortError'?'读取超时，请刷新重试。':error.message;for(const id of ids)el(id).textContent='—';el('rows').replaceChildren();}finally{clearTimeout(timeout);if(active===abort)el('refresh').disabled=false;}}
+el('filters').addEventListener('submit',e=>{e.preventDefault();page=1;load();});el('prev').addEventListener('click',()=>{if(page>1){page--;load();}});el('next').addEventListener('click',()=>{if(page*50<total){page++;load();}});window.addEventListener('pagehide',()=>abort?.abort());load();
+})();
+</script></body></html>

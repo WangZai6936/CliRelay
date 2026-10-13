@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator"
@@ -78,12 +79,29 @@ func runExecutionWithRetry[T any](
 
 	var lastErr error
 	for attempt := 0; ; attempt++ {
+		budget := RecoveryBudgetFromContext(ctx)
+		beforeAttempts := budget.attemptCount()
 		resp, errExec := executeOnce(ctx, normalized, req, opts)
 		if errExec == nil {
 			return resp, nil
 		}
 		lastErr = errExec
-		wait, shouldRetry := manager.shouldRetryAfterError(errExec, attempt, normalized, req.Model, maxWait, opts.Metadata)
+		var wait time.Duration
+		var shouldRetry bool
+		if budget != nil {
+			budget.recordFailure(errExec)
+			if isRequestInvalidError(errExec) || isContentPolicyViolation(errExec) || statusCodeFromError(errExec) == http.StatusOK {
+				break
+			}
+			wait, shouldRetry = manager.recoveryWait(ctx, normalized, req.Model, opts.Metadata, maxWait)
+			// An apparently ready account can still fail a capability/executor
+			// gate. If no call happened, an immediate rerun cannot make progress.
+			if wait == 0 && beforeAttempts == budget.attemptCount() {
+				shouldRetry = false
+			}
+		} else {
+			wait, shouldRetry = manager.shouldRetryAfterError(errExec, attempt, normalized, req.Model, maxWait, opts.Metadata)
+		}
 		if !shouldRetry {
 			break
 		}
@@ -104,24 +122,36 @@ func (s executionService) executeMixedOnce(ctx context.Context, providers []stri
 	}
 
 	for {
+		if budget := RecoveryBudgetFromContext(ctx); budget != nil && !budget.available(ctx, 0) {
+			return cliproxyexecutor.Response{}, budget.exhaustedError(ctx)
+		}
 		candidate, releaseSlot, errReady := s.nextReadyCandidate(ctx, &scope, req)
 		if errReady != nil {
 			return cliproxyexecutor.Response{}, errReady
 		}
 
+		if budget := RecoveryBudgetFromContext(ctx); budget != nil {
+			if errBudget := budget.consume(ctx, candidate.auth); errBudget != nil {
+				releaseSlot()
+				return cliproxyexecutor.Response{}, errBudget
+			}
+		}
+		startedAt := time.Now()
 		resp, errExec := candidate.executor.Execute(candidate.execCtx, candidate.auth, candidate.execReq, scope.opts)
 		releaseSlot()
 		result := Result{
-			AuthID:   candidate.auth.ID,
-			Provider: candidate.provider,
-			Model:    scope.routeModel,
-			Success:  errExec == nil,
+			AuthID:    candidate.auth.ID,
+			Provider:  candidate.provider,
+			Model:     scope.routeModel,
+			Success:   errExec == nil,
+			StartedAt: startedAt,
 		}
 		if errExec != nil {
 			if errCtx := candidate.execCtx.Err(); errCtx != nil {
 				return cliproxyexecutor.Response{}, errCtx
 			}
 			result.Error = errorFromExecution(errExec)
+			RecoveryBudgetFromContext(ctx).recordFailure(errExec)
 			result.Headers = headersFromError(errExec)
 			if ra := retryAfterFromError(errExec); ra != nil {
 				result.RetryAfter = ra
@@ -176,11 +206,21 @@ func (s executionService) executeStreamMixedOnce(ctx context.Context, providers 
 	}
 
 	for {
+		if budget := RecoveryBudgetFromContext(ctx); budget != nil && !budget.available(ctx, 0) {
+			return nil, budget.exhaustedError(ctx)
+		}
 		candidate, releaseSlot, errReady := s.nextReadyCandidate(ctx, &scope, req)
 		if errReady != nil {
 			return nil, errReady
 		}
 
+		if budget := RecoveryBudgetFromContext(ctx); budget != nil {
+			if errBudget := budget.consume(ctx, candidate.auth); errBudget != nil {
+				releaseSlot()
+				return nil, errBudget
+			}
+		}
+		startedAt := time.Now()
 		streamResult, errStream := candidate.executor.ExecuteStream(candidate.execCtx, candidate.auth, candidate.execReq, scope.opts)
 		if errStream != nil {
 			releaseSlot()
@@ -188,11 +228,13 @@ func (s executionService) executeStreamMixedOnce(ctx context.Context, providers 
 				return nil, errCtx
 			}
 			rerr := errorFromExecution(errStream)
+			RecoveryBudgetFromContext(ctx).recordFailure(errStream)
 			result := Result{
 				AuthID:     candidate.auth.ID,
 				Provider:   candidate.provider,
 				Model:      scope.routeModel,
 				Success:    false,
+				StartedAt:  startedAt,
 				Error:      rerr,
 				RetryAfter: retryAfterFromError(errStream),
 				Headers:    headersFromError(errStream),
@@ -205,7 +247,7 @@ func (s executionService) executeStreamMixedOnce(ctx context.Context, providers 
 			continue
 		}
 
-		return s.wrapStreamResult(candidate.execCtx, candidate.auth, candidate.provider, scope.routeModel, scope.opts.SourceFormat, streamResult, releaseSlot), nil
+		return s.wrapStreamResult(candidate.execCtx, candidate.auth, candidate.provider, scope.routeModel, scope.opts.SourceFormat, streamResult, releaseSlot, startedAt), nil
 	}
 }
 
@@ -240,7 +282,16 @@ func (s executionService) nextReadyCandidate(ctx context.Context, scope *mixedEx
 		if errPick != nil {
 			queued, releaseSlot, errWait := s.waitForSaturatedSlot(ctx, scope)
 			if errWait == nil {
-				return queued, releaseSlot, nil
+				if budget := RecoveryBudgetFromContext(ctx); budget != nil && !budget.authRetryAllowed(queued.auth, int(s.manager.requestRetry.Load())) {
+					releaseSlot()
+					return nil, nil, &Error{Code: "auth_retry_exhausted", Message: "credential retry budget exhausted", HTTPStatus: 503}
+				}
+				releaseProbe, allowed := s.manager.acquireOverloadProbe(queued.auth.ID, scope.routeModel)
+				if !allowed {
+					releaseSlot()
+					return nil, nil, &Error{Code: "server_is_overloaded", Message: "credential recovery probe is in progress", HTTPStatus: 503}
+				}
+				return queued, func() { releaseProbe(); releaseSlot() }, nil
 			}
 			if !errors.Is(errWait, errNoSaturatedCandidate) {
 				scope.lastErr = errWait
@@ -253,7 +304,18 @@ func (s executionService) nextReadyCandidate(ctx context.Context, scope *mixedEx
 
 		releaseSlot, errSlot := s.manager.acquireAccountSlot(candidate.auth)
 		if errSlot == nil {
-			return candidate, releaseSlot, nil
+			if budget := RecoveryBudgetFromContext(ctx); budget != nil && !budget.authRetryAllowed(candidate.auth, int(s.manager.requestRetry.Load())) {
+				releaseSlot()
+				scope.lastErr = &Error{Code: "auth_retry_exhausted", Message: "credential retry budget exhausted", HTTPStatus: 503}
+				continue
+			}
+			releaseProbe, allowed := s.manager.acquireOverloadProbe(candidate.auth.ID, scope.routeModel)
+			if !allowed {
+				releaseSlot()
+				scope.lastErr = &Error{Code: "server_is_overloaded", Message: "credential recovery probe is in progress", HTTPStatus: 503}
+				continue
+			}
+			return candidate, func() { releaseProbe(); releaseSlot() }, nil
 		}
 		if isRequestInvalidError(errSlot) {
 			return nil, nil, errSlot
@@ -273,9 +335,12 @@ func (s executionService) waitForSaturatedSlot(ctx context.Context, scope *mixed
 	for _, candidate := range scope.saturated {
 		auths = append(auths, candidate.auth)
 	}
-	releaseSlot, authID, err := s.manager.waitAccountSlot(ctx, auths)
+	budget := RecoveryBudgetFromContext(ctx)
+	waitCtx, cancelWait := budget.waitingContext(ctx)
+	defer cancelWait()
+	releaseSlot, authID, err := s.manager.waitAccountSlot(waitCtx, auths)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, budget.waitingError(ctx, err)
 	}
 	for i, candidate := range scope.saturated {
 		if candidate.auth.ID != authID {
@@ -293,7 +358,30 @@ func (s executionService) waitForSaturatedSlot(ctx context.Context, scope *mixed
 }
 
 func (s executionService) nextMixedCandidate(ctx context.Context, scope *mixedExecutionScope, req cliproxyexecutor.Request) (*mixedExecutionCandidate, error) {
-	auth, executor, provider, errPick := s.manager.pickNextMixed(ctx, scope.providers, scope.routeModel, scope.opts, scope.tried)
+	var auth *Auth
+	var executor ProviderExecutor
+	var provider string
+	var errPick error
+	// Prefer credentials this request has not used yet, while retaining the
+	// original selector and its security/capability filters for both selections.
+	if budget := RecoveryBudgetFromContext(ctx); budget != nil {
+		tried := budget.usedAuths()
+		for id := range scope.tried {
+			tried[id] = struct{}{}
+		}
+		auth, executor, provider, errPick = s.manager.pickNextMixed(ctx, scope.providers, scope.routeModel, scope.opts, tried)
+		if auth == nil && budget.lastAuth() != "" {
+			tried = make(map[string]struct{}, len(scope.tried)+1)
+			for id := range scope.tried {
+				tried[id] = struct{}{}
+			}
+			tried[budget.lastAuth()] = struct{}{}
+			auth, executor, provider, errPick = s.manager.pickNextMixed(ctx, scope.providers, scope.routeModel, scope.opts, tried)
+		}
+	}
+	if auth == nil {
+		auth, executor, provider, errPick = s.manager.pickNextMixed(ctx, scope.providers, scope.routeModel, scope.opts, scope.tried)
+	}
 	if errPick != nil {
 		return nil, errPick
 	}
@@ -336,6 +424,7 @@ func (s executionService) wrapStreamResult(
 	sourceFormat sdktranslator.Format,
 	streamResult *cliproxyexecutor.StreamResult,
 	releaseSlot func(),
+	startedAt time.Time,
 ) *cliproxyexecutor.StreamResult {
 	out := make(chan cliproxyexecutor.StreamChunk)
 	streamHeaders := streamResult.Headers.Clone()
@@ -353,6 +442,7 @@ func (s executionService) wrapStreamResult(
 			}
 			if chunk.Err != nil && !failed {
 				failed = true
+				RecoveryBudgetFromContext(streamCtx).recordFailure(chunk.Err)
 				rerr := errorFromExecution(chunk.Err)
 				chunkHeaders := headersFromError(chunk.Err)
 				if len(chunkHeaders) == 0 {
@@ -363,6 +453,7 @@ func (s executionService) wrapStreamResult(
 					Provider:   streamProvider,
 					Model:      routeModel,
 					Success:    false,
+					StartedAt:  startedAt,
 					Error:      rerr,
 					RetryAfter: retryAfterFromError(chunk.Err),
 					Headers:    chunkHeaders,
@@ -381,6 +472,12 @@ func (s executionService) wrapStreamResult(
 			case out <- chunk:
 			}
 		}
+		// Cancellation is not evidence that a recovering upstream is healthy.
+		// It also must not replace an overload with an incomplete-stream error
+		// when an executor closes its channel without an error after cancellation.
+		if streamCtx != nil && streamCtx.Err() != nil {
+			return
+		}
 		if !failed && completionTracker != nil {
 			if err := completionTracker.ErrIfIncomplete(); err != nil {
 				failed = true
@@ -390,6 +487,7 @@ func (s executionService) wrapStreamResult(
 					Provider:   streamProvider,
 					Model:      routeModel,
 					Success:    false,
+					StartedAt:  startedAt,
 					Error:      rerr,
 					RetryAfter: retryAfterFromError(err),
 					Headers:    headers.Clone(),
@@ -407,13 +505,14 @@ func (s executionService) wrapStreamResult(
 				}
 			}
 		}
-		if !failed {
+		if !failed && (streamCtx == nil || streamCtx.Err() == nil) {
 			s.manager.MarkResult(streamCtx, Result{
-				AuthID:   streamAuth.ID,
-				Provider: streamProvider,
-				Model:    routeModel,
-				Success:  true,
-				Headers:  headers.Clone(),
+				AuthID:    streamAuth.ID,
+				Provider:  streamProvider,
+				Model:     routeModel,
+				Success:   true,
+				StartedAt: startedAt,
+				Headers:   headers.Clone(),
 			})
 		}
 	}(execCtx, auth.Clone(), provider, streamResult.Chunks, streamHeaders)

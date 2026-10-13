@@ -123,6 +123,8 @@ func newProxyAwareHTTPClient(ctx context.Context, cfg *config.Config, auth *clip
 	if httpClient.Transport == nil {
 		httpClient.Transport = cachedDirectTransport(cfgToSDKCfg(cfg))
 	}
+	selectedTransport, transportGroup, transportKind := applyCodexHTTPPolicy(ctx, cfg, auth, proxyURL, httpClient.Transport)
+	httpClient.Transport = selectedTransport
 
 	if proxyURL != "" {
 		if manager := globalWarmManager.Load(); manager != nil && httpClient.Transport != nil {
@@ -132,8 +134,9 @@ func newProxyAwareHTTPClient(ctx context.Context, cfg *config.Config, auth *clip
 			}
 		}
 	}
-	if ginCtx, ok := ctx.Value(util.ContextKeyGin).(*gin.Context); ok && ginCtx != nil && httpClient.Transport != nil {
-		httpClient.Transport = &upstreamTracingTransport{base: httpClient.Transport, ginCtx: ginCtx}
+	ginCtx, _ := ctx.Value(util.ContextKeyGin).(*gin.Context)
+	if (ginCtx != nil || transportGroup != "") && httpClient.Transport != nil {
+		httpClient.Transport = &upstreamTracingTransport{base: httpClient.Transport, ginCtx: ginCtx, transportGroup: transportGroup, transportKind: transportKind}
 	}
 	return httpClient
 }

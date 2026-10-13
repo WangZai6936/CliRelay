@@ -14,10 +14,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/interfaces"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	"github.com/router-for-me/CLIProxyAPI/v6/sdk/api/handlers"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
+	requestusage "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/usage"
+	"github.com/router-for-me/CLIProxyAPI/v6/sdkbridge/logging"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -211,6 +212,15 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 				pinnedAuthID = ""
 			}
 			logging.RenewGinRequestCorrelationID(c)
+			// Each generation has its own final outcome; the upgraded connection
+			// can carry many turns and must not merge their attempts or results.
+			previousRequest := c.Request
+			turnCtx := requestusage.BeginRequest(previousRequest.Context())
+			c.Request = previousRequest.WithContext(turnCtx)
+			defer func() {
+				requestusage.FinishRequest(turnCtx)
+				c.Request = previousRequest
+			}()
 			// Deferred so the slot comes back however the turn ends: completed,
 			// failed upstream, client gone, or a panic.
 			defer releaseQuota()
@@ -522,6 +532,7 @@ func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocket(
 					// 	websocketPayloadEventType(errorPayload),
 					// 	errWrite,
 					// )
+					requestusage.MarkRequestDeliveryFailed(c.Request.Context())
 					cancel(errMsg.Error)
 					return completedOutput, errWrite
 				}
@@ -557,6 +568,7 @@ func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocket(
 							websocketPayloadEventType(errorPayload),
 							errWrite,
 						)
+						requestusage.MarkRequestDeliveryFailed(c.Request.Context())
 						cancel(errMsg.Error)
 						return completedOutput, errWrite
 					}
@@ -587,6 +599,7 @@ func (h *OpenAIResponsesAPIHandler) forwardResponsesWebsocket(
 				// 	websocketPayloadPreview(payloads[i]),
 				// )
 				if errWrite := conn.WriteMessage(websocket.TextMessage, payloads[i]); errWrite != nil {
+					requestusage.MarkRequestDeliveryFailed(c.Request.Context())
 					log.Warnf(
 						"responses websocket: downstream_out write failed id=%s event=%s error=%v",
 						sessionID,

@@ -23,6 +23,7 @@ type upstreamTransportCacheKey struct {
 	insecureSkipVerify bool
 	caCert             string
 	caCertStat         string
+	forceHTTP1         bool
 }
 
 type upstreamTransportCacheEntry struct {
@@ -53,11 +54,16 @@ func cachedDirectTransport(sdkCfg *config.SDKConfig) *http.Transport {
 }
 
 func (c *upstreamTransportCache) get(proxyURL string, sdkCfg *config.SDKConfig, direct bool) *http.Transport {
+	return c.getProtocol(proxyURL, sdkCfg, direct, false)
+}
+
+func (c *upstreamTransportCache) getProtocol(proxyURL string, sdkCfg *config.SDKConfig, direct, forceHTTP1 bool) *http.Transport {
 	if c == nil {
 		return nil
 	}
 	key := newUpstreamTransportCacheKey(proxyURL, sdkCfg)
 	key.direct = direct
+	key.forceHTTP1 = forceHTTP1
 	if !key.direct && key.proxyURL == "" {
 		return nil
 	}
@@ -81,6 +87,11 @@ func (c *upstreamTransportCache) get(proxyURL string, sdkCfg *config.SDKConfig, 
 		return nil
 	}
 	util.ApplyTLSConfig(transport, sdkCfg)
+	if forceHTTP1 {
+		transport.Protocols = new(http.Protocols)
+		transport.Protocols.SetHTTP1(true)
+		transport.ForceAttemptHTTP2 = false
+	}
 
 	if len(c.transports) >= maxUpstreamTransportCacheEntries {
 		c.evictOldestLocked()

@@ -280,6 +280,13 @@ request-retry: 3
 # Maximum wait time in seconds for a cooled-down credential before triggering a retry.
 max-retry-interval: 30
 
+# Opt-in Codex HTTP protocol comparison. Zero preserves current ALPN selection.
+# A stable request-ID cohort uses a separate, reusable HTTP/1.1 connection pool;
+# retries stay in the same cohort. Other providers and websockets are unaffected.
+# Start with a small percentage only after verification, and set zero to roll back.
+codex-http-transport:
+  http1-percent: 0
+
 # Behavior when an AI account reaches the `concurrency_limit` set on its auth file.
 # Requests first fail over to any account with a free slot; only when every candidate
 # is busy do they queue here, in arrival order, and resume as soon as a slot frees up.
@@ -357,6 +364,10 @@ nonstream-keepalive-interval: 0
 
 # Streaming behavior (SSE keep-alives + safe bootstrap retries).
 streaming:
+  # Shared cap across initial HTTP failover and pre-output SSE recovery.
+  # 0 preserves legacy request-retry/bootstrap-retries behavior.
+  max-attempts: 4
+  recovery-timeout-seconds: 20 # Starts at first failure; healthy streams remain unbounded.
   keepalive-seconds: 15   # Default: 15. Set < 0 to disable keep-alives.
   bootstrap-retries: 1    # Default: 1. Retries before first byte is sent.
 

@@ -165,6 +165,10 @@ func (e *CodexWebsocketsExecutor) Execute(ctx context.Context, auth *cliproxyaut
 			recorder.AppendResponseChunk(bodyErr)
 		}
 		if respHS != nil && respHS.StatusCode == http.StatusUpgradeRequired {
+			reporter.publishFailureWithContentBytes(execCtx.Context, req.Payload, string(bodyErr))
+			if errBudget := cliproxyauth.ReserveAdditionalRecoveryAttempt(execCtx.Context, statusErr{code: http.StatusUpgradeRequired, msg: string(bodyErr)}); errBudget != nil {
+				return resp, errBudget
+			}
 			return e.CodexExecutor.Execute(execCtx.Context, auth, req, opts)
 		}
 		if respHS != nil && respHS.StatusCode > 0 {
@@ -198,6 +202,10 @@ func (e *CodexWebsocketsExecutor) Execute(ctx context.Context, auth *cliproxyaut
 	if errSend := writeCodexWebsocketMessage(sess, conn, wsReqBody); errSend != nil {
 		if sess != nil {
 			e.invalidateUpstreamConn(sess, conn, "send_error", errSend)
+			if errBudget := cliproxyauth.ReserveAdditionalRecoveryAttempt(execCtx.Context, errSend); errBudget != nil {
+				return resp, errBudget
+			}
+			reporter.providerAttempts.Store(2)
 
 			// Retry once with a fresh websocket connection. This is mainly to handle
 			// upstream closing the socket between sequential requests within the same
@@ -363,6 +371,13 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 			recorder.AppendResponseChunk(bodyErr)
 		}
 		if respHS != nil && respHS.StatusCode == http.StatusUpgradeRequired {
+			if sess != nil {
+				sess.reqMu.Unlock()
+			}
+			reporter.publishFailureWithContentBytes(execCtx.Context, req.Payload, string(bodyErr))
+			if errBudget := cliproxyauth.ReserveAdditionalRecoveryAttempt(execCtx.Context, statusErr{code: http.StatusUpgradeRequired, msg: string(bodyErr)}); errBudget != nil {
+				return nil, errBudget
+			}
 			return e.CodexExecutor.ExecuteStream(execCtx.Context, auth, req, opts)
 		}
 		if respHS != nil && respHS.StatusCode > 0 {
@@ -390,6 +405,12 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 		recorder.RecordResponseError(errSend)
 		if sess != nil {
 			e.invalidateUpstreamConn(sess, conn, "send_error", errSend)
+			if errBudget := cliproxyauth.ReserveAdditionalRecoveryAttempt(execCtx.Context, errSend); errBudget != nil {
+				sess.clearActive(readCh)
+				sess.reqMu.Unlock()
+				return nil, errBudget
+			}
+			reporter.providerAttempts.Store(2)
 
 			// Retry once with a new websocket connection for the same execution session.
 			connRetry, respRetry, errDialRetry := e.ensureUpstreamConn(execCtx.Context, auth, sess, authID, wsURL, wsHeaders) //nolint:bodyclose // failed handshake body is closed below; successful websocket response is owned by connRetry.

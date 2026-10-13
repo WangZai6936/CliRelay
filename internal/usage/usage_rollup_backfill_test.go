@@ -419,6 +419,10 @@ func TestUsageRollupBucketRetentionPrunesMinuteHourDay(t *testing.T) {
 	if err := InitDB(dbPath, config.RequestLogStorageConfig{RetentionDays: 7}, time.UTC); err != nil {
 		t.Fatalf("InitDB: %v", err)
 	}
+	// This test owns the cleanup call and its affected-row count. Startup
+	// maintenance must finish before stale fixtures are installed, otherwise
+	// that worker can delete all three rows before the call being asserted.
+	stopRequestLogMaintenance()
 	t.Cleanup(func() {
 		stopRequestLogMaintenance()
 		CloseDB()

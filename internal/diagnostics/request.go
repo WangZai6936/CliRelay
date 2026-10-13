@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	internalrouting "github.com/router-for-me/CLIProxyAPI/v6/internal/routing"
@@ -107,16 +108,30 @@ type QuotaSnapshot struct {
 }
 
 type UpstreamSnapshot struct {
-	Attempt      int    `json:"attempt,omitempty"`
-	Provider     string `json:"provider,omitempty"`
-	AuthID       string `json:"auth_id,omitempty"`
-	AuthLabel    string `json:"auth_label,omitempty"`
-	URL          string `json:"url,omitempty"`
-	Method       string `json:"method,omitempty"`
-	Status       int    `json:"status,omitempty"`
-	ErrorMessage string `json:"error_message,omitempty"`
-	RequestID    string `json:"request_id,omitempty"`
-	CFRay        string `json:"cf_ray,omitempty"`
+	Attempt           int    `json:"attempt,omitempty"`
+	Provider          string `json:"provider,omitempty"`
+	AuthID            string `json:"auth_id,omitempty"`
+	AuthLabel         string `json:"auth_label,omitempty"`
+	URL               string `json:"url,omitempty"`
+	Method            string `json:"method,omitempty"`
+	Status            int    `json:"status,omitempty"`
+	ErrorMessage      string `json:"error_message,omitempty"`
+	RequestID         string `json:"request_id,omitempty"`
+	CFRay             string `json:"cf_ray,omitempty"`
+	Protocol          string `json:"protocol,omitempty"`
+	TransportGroup    string `json:"transport_group,omitempty"`
+	TransportKind     string `json:"transport_kind,omitempty"`
+	ConnectionID      string `json:"connection_id,omitempty"`
+	ConnectionReused  *bool  `json:"connection_reused,omitempty"`
+	StartedAt         string `json:"started_at,omitempty"`
+	ResponseHeadersAt string `json:"response_headers_at,omitempty"`
+	FirstBodyAt       string `json:"first_body_at,omitempty"`
+	BodyBytes         int64  `json:"body_bytes,omitempty"`
+	FirstOutputAt     string `json:"first_output_at,omitempty"`
+	OutputBytes       int64  `json:"output_bytes,omitempty"`
+	ErrorAt           string `json:"error_at,omitempty"`
+	ErrorAfterMS      int64  `json:"error_after_ms,omitempty"`
+	ErrorStage        string `json:"error_stage,omitempty"`
 }
 
 type ResponseSnapshot struct {
@@ -372,6 +387,7 @@ func SetUpstreamRequest(ctx context.Context, attempt int, provider, authID, auth
 	d.Upstream.AuthLabel = strings.TrimSpace(authLabel)
 	d.Upstream.URL = strings.TrimSpace(rawURL)
 	d.Upstream.Method = strings.TrimSpace(method)
+	d.Upstream.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
 }
 
 func SetUpstreamResponse(ctx context.Context, status int) {
@@ -429,6 +445,7 @@ func SetUpstreamError(ctx context.Context, err error) {
 		d.Upstream = &UpstreamSnapshot{}
 	}
 	d.Upstream.ErrorMessage = strings.TrimSpace(err.Error())
+	recordUpstreamErrorTimeLocked(d.Upstream)
 }
 
 func SetEgress(c *gin.Context, egress map[string]any) {
@@ -697,6 +714,10 @@ func cloneUpstream(in *UpstreamSnapshot) *UpstreamSnapshot {
 		return nil
 	}
 	out := *in
+	if in.ConnectionReused != nil {
+		reused := *in.ConnectionReused
+		out.ConnectionReused = &reused
+	}
 	return &out
 }
 

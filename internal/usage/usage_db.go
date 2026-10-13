@@ -706,6 +706,11 @@ func initOpenedDBLocked(db, readDB *sql.DB, dbPath, driver string, storageCfg co
 	if runSQLiteBootstrap {
 		log.Debugf("usage: running tenant scope column migration")
 		migrateRequestLogTenantColumns(db)
+		if err := ensureRequestOutcomeSchema(db); err != nil {
+			_ = db.Close()
+			usageDB, usageReadDB = nil, nil
+			return err
+		}
 		log.Debugf("usage: running quota tenant scope column migration")
 		migrateQuotaTenantColumns(db)
 		log.Debugf("usage: running content column migration")

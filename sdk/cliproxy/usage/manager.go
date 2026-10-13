@@ -21,28 +21,38 @@ type Record struct {
 	// UpstreamResponseModel is the model the upstream declared in its own
 	// response body, empty when it declared none. It is recorded for auditing
 	// only and never substitutes for Model in logging or cost.
-	UpstreamResponseModel string
-	APIKey                string
-	APIKeyID              string
-	APIKeyName            string
-	AuthID                string
-	AuthIndex             string
-	AuthSubjectID         string
-	Source                string
-	ChannelName           string
-	RequestedAt           time.Time
-	LatencyMs             int64
-	FirstTokenMs          int64
-	Failed                bool
+	UpstreamResponseModel    string
+	UpstreamProtocol         string
+	UpstreamTransportGroup   string
+	UpstreamTransportKind    string
+	UpstreamConnectionID     string
+	UpstreamConnectionReused *bool
+	UpstreamErrorStage       string
+	APIKey                   string
+	APIKeyID                 string
+	APIKeyName               string
+	AuthID                   string
+	AuthIndex                string
+	AuthSubjectID            string
+	Source                   string
+	ChannelName              string
+	RequestedAt              time.Time
+	LatencyMs                int64
+	FirstTokenMs             int64
+	Failed                   bool
 	// ProviderAttempts includes a bounded compatibility retry inside an executor.
 	// Zero means one attempt for older publishers.
 	ProviderAttempts     int64
 	APIIdentifier        string
 	RequestID            string
 	RequestCorrelationID string
-	ResponseStatus       int
-	Streaming            bool
-	Detail               Detail
+	// Attempt and FailureStage are compact metadata retained after body cleanup.
+	Attempt        int64
+	FailureStage   string
+	RequestOutcome *RequestOutcome
+	ResponseStatus int
+	Streaming      bool
+	Detail         Detail
 
 	// TrustedTenantID is set only by authenticated internal execution paths.
 	// When empty, persistence resolves the tenant from the real API key.
@@ -246,6 +256,7 @@ func (m *Manager) Publish(ctx context.Context, record Record) {
 	if m == nil {
 		return
 	}
+	attachRequestAttempt(ctx, &record)
 	// ensure worker is running even if Start was not called explicitly
 	m.Start(context.Background())
 	if record.IdempotencyKey == "" {

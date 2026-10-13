@@ -178,12 +178,43 @@ func TestTextFallbackCoversNewNamesDisabledModelsAndMissingRoutes(t *testing.T) 
 }
 
 func TestTextFallbackKeepsHealthyAndUnauthorizedModelsAndUnavailableTarget(t *testing.T) {
+	// Reproduce the shared-registry condition explicitly instead of depending
+	// on Go map iteration or the order in which unrelated tests execute.
+	const unrelatedClient = "text-fallback-unrelated-auto-client"
+	registry.GetGlobalRegistry().RegisterClient(unrelatedClient, "unrelated-auto-provider", []*registry.ModelInfo{{ID: "unrelated-auto-model", Created: time.Now().Unix()}})
+	t.Cleanup(func() { registry.GetGlobalRegistry().UnregisterClient(unrelatedClient) })
 	server, _ := textFallbackFixture(t, "")
-	for _, model := range []string{"working-text-model(high)", "auto"} {
+	checkHealthy := func(model string) {
+		if model == "auto" {
+			// Auto can select any process-wide registry candidate, including a
+			// different one on a later resolution. Make each possible selection
+			// routable for this healthy-auto case, then restore the narrow fixture
+			// before checking denied models and an unavailable fallback target.
+			reg := registry.GetGlobalRegistry()
+			auth := server.handlers.AuthManager.List()[0]
+			original := reg.GetModelsForClient(auth.ID)
+			models := append([]*registry.ModelInfo(nil), original...)
+			seen := make(map[string]bool, len(models))
+			for _, info := range models {
+				seen[info.ID] = true
+			}
+			for _, available := range reg.GetAvailableModels("") {
+				id, _ := available["id"].(string)
+				if !seen[id] {
+					models = append(models, reg.GetModelInfo(id, ""))
+					seen[id] = true
+				}
+			}
+			reg.RegisterClient(auth.ID, auth.Provider, models)
+			defer reg.RegisterClient(auth.ID, auth.Provider, original)
+		}
 		r := fallbackRequest(t, server, "", "/v1/responses", fmt.Sprintf(`{"model":%q,"input":"hi"}`, model))
 		if r.Code != 200 || r.Header().Get("X-Clirelay-Resolved-Model") != "" {
 			t.Fatalf("valid suffix/auto request was substituted: %s", model)
 		}
+	}
+	for _, model := range []string{"working-text-model(high)", "auto"} {
+		checkHealthy(model)
 	}
 	for _, tc := range []struct {
 		model, allowed string

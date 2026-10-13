@@ -86,6 +86,10 @@ func (s *RequestStatistics) countLogicalRequestLocked(statsKey, model string, re
 // RecordRequestCancellation keeps client cancellation separate from provider
 // failures. No billing/attempt log is fabricated for a canceled generation.
 func RecordRequestCancellation(ctx context.Context, record coreusage.Record) {
+	coreusage.ObserveRequestIdentity(ctx, record)
+	if requestID := coreusage.RequestIdentity(ctx); requestID != "" {
+		record.RequestCorrelationID = requestID
+	}
 	if !statisticsEnabled.Load() || defaultRequestStatistics == nil {
 		return
 	}

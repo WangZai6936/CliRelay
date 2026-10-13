@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -141,6 +142,9 @@ func (s cooldownService) markResult(ctx context.Context, result Result) {
 	if s.manager == nil || result.AuthID == "" {
 		return
 	}
+	if result.RetryAfter == nil && isTemporaryUpstreamUnavailable(result.Error) {
+		result.RetryAfter = temporaryUpstreamRetryAfter(result.Headers, time.Now())
+	}
 
 	var effects resultStateEffects
 	var cooldown *CooldownNotice
@@ -179,6 +183,16 @@ func (s cooldownService) applyResultLocked(auth *Auth, result Result, now time.T
 func (s cooldownService) applySuccessLocked(auth *Auth, result Result, now time.Time, effects *resultStateEffects) {
 	if auth == nil {
 		return
+	}
+	if s.manager != nil && !s.manager.clearOverloadOnSuccessLocked(auth, result) {
+		return
+	}
+	// A result only proves recovery if its attempt began after the current
+	// failure. This also protects ordinary 5xx/auth cooldowns from old streams.
+	if result.Model != "" && !result.StartedAt.IsZero() {
+		if state := auth.ModelStates[result.Model]; state != nil && state.LastError != nil && state.UpdatedAt.After(result.StartedAt) {
+			return
+		}
 	}
 	markClaudeOAuthHealthSuccessLocked(auth, result, now)
 	if result.Model != "" {
@@ -226,6 +240,9 @@ func (s cooldownService) applyFailureLocked(auth *Auth, result Result, now time.
 		return
 	}
 	applyAuthFailureState(auth, result.Error, result.RetryAfter, now)
+	if isTemporaryUpstreamUnavailable(result.Error) && !quotaCooldownDisabledForAuth(auth) {
+		auth.NextRetryAfter = now.Add(s.manager.recordOverloadLocked(auth, result, now))
+	}
 }
 
 func (s cooldownService) applyModelFailureLocked(auth *Auth, result Result, now time.Time, effects *resultStateEffects) {
@@ -293,8 +310,8 @@ func (s cooldownService) applyModelFailureLocked(auth *Auth, result Result, now 
 			// pool has been shed, so those back off briefly instead.
 			if quotaCooldownDisabledForAuth(auth) {
 				state.NextRetryAfter = time.Time{}
-			} else if isTransientUpstreamOverloadError(result.Error) {
-				state.NextRetryAfter = now.Add(transientUpstreamOverloadCooldown)
+			} else if isTemporaryUpstreamUnavailable(result.Error) {
+				state.NextRetryAfter = now.Add(s.manager.recordOverloadLocked(auth, result, now))
 			} else {
 				state.NextRetryAfter = now.Add(1 * time.Minute)
 			}
@@ -433,6 +450,26 @@ const transientRateLimitCooldown = time.Minute
 // Long enough to let the current spike pass, short enough that a small pool
 // recovers before a retrying client can notice it was ever empty.
 const transientUpstreamOverloadCooldown = 5 * time.Second
+
+// HTTP 503 itself declares temporary unavailability. Other 5xx errors retain
+// their previous cooldown unless the provider explicitly names load shedding.
+func isTemporaryUpstreamUnavailable(err *Error) bool {
+	return err != nil && (err.HTTPStatus == http.StatusServiceUnavailable || isTransientUpstreamOverloadError(err))
+}
+
+func temporaryUpstreamRetryAfter(header http.Header, now time.Time) *time.Duration {
+	raw := strings.TrimSpace(header.Get("Retry-After"))
+	if seconds, err := strconv.ParseInt(raw, 10, 64); err == nil && seconds > 0 {
+		if delay := time.Duration(seconds) * time.Second; delay > 0 {
+			return &delay
+		}
+	}
+	if when, err := http.ParseTime(raw); err == nil && when.After(now) {
+		delay := when.Sub(now)
+		return &delay
+	}
+	return nil
+}
 
 // isTransientUpstreamOverloadError reports whether a 5xx describes the provider
 // shedding load rather than a fault attributable to this credential.
