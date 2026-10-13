@@ -319,6 +319,7 @@ func recordAPIRequest(ctx context.Context, cfg *config.Config, info upstreamRequ
 
 func recordAPIResponseMetadata(ctx context.Context, cfg *config.Config, status int, headers http.Header) {
 	diagnostics.SetUpstreamResponse(ctx, status)
+	diagnostics.SetUpstreamResponseIdentifiers(ctx, headers)
 	capture, attempt := captureAttempt(ctx, cfg)
 	if capture == nil || attempt == nil {
 		return

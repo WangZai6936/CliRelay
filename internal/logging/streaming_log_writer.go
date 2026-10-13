@@ -123,11 +123,13 @@ func (w *FileStreamingLogWriter) Close() error {
 		return nil
 	}
 
-	logFile, errOpen := os.OpenFile(w.logFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	logFile, errOpen := openActiveLogFile(w.logFilePath)
 	if errOpen != nil {
 		w.cleanupTempFiles()
 		return fmt.Errorf("failed to create log file: %w", errOpen)
 	}
+	releaseFile := releaseActiveLogFileOnce(w.logFilePath)
+	defer releaseFile()
 
 	writeErr := w.writeFinalLog(logFile)
 	if errClose := logFile.Close(); errClose != nil {
@@ -138,6 +140,7 @@ func (w *FileStreamingLogWriter) Close() error {
 	}
 
 	w.cleanupTempFiles()
+	releaseFile()
 	// Retain only completed logs, after the final file has been closed.
 	if writeErr == nil && w.logger != nil {
 		if errCleanup := w.logger.cleanupOldRequestLogs(false); errCleanup != nil {
@@ -226,13 +229,13 @@ func (w *FileStreamingLogWriter) appendTruncationNote() {
 
 func (w *FileStreamingLogWriter) cleanupTempFiles() {
 	if w.requestBodyPath != "" {
-		if errRemove := os.Remove(w.requestBodyPath); errRemove != nil {
+		if errRemove := removeOwnedLogTemp(w.requestBodyPath); errRemove != nil {
 			log.WithError(errRemove).Warn("failed to remove request body temp file")
 		}
 		w.requestBodyPath = ""
 	}
 	if w.responseBodyPath != "" {
-		if errRemove := os.Remove(w.responseBodyPath); errRemove != nil {
+		if errRemove := removeOwnedLogTemp(w.responseBodyPath); errRemove != nil {
 			log.WithError(errRemove).Warn("failed to remove response body temp file")
 		}
 		w.responseBodyPath = ""

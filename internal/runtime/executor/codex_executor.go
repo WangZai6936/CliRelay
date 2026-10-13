@@ -428,6 +428,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 		var param any
 		completed := false
 		imageStream := newCodexImageStreamNormalizer()
+		var bootstrap codexStreamBootstrap
 		for scanner.Scan() {
 			line := scanner.Bytes()
 			normalizedEvents := normalizeCodexImageGenerationOutboundEventWithState(imageStream, bytes.Clone(line))
@@ -452,10 +453,15 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 						terminalErr = codexResponsesFailedStatusErr(data)
 					}
 				}
+				if terminalErr != nil && !bootstrap.started {
+					// Return the semantic failure through Err before translating it
+					// into downstream data that would commit an otherwise empty stream.
+					break
+				}
 
 				chunks := sdktranslator.TranslateStream(execCtx.Context, to, execCtx.SourceFormat, req.Model, execCtx.OriginalPayload, body, eventLine, &param)
-				for i := range chunks {
-					if !sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Payload: []byte(chunks[i])}) {
+				for _, payload := range bootstrap.prepare(eventLine, chunks) {
+					if !sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Payload: payload}) {
 						reporter.recordCancellation(execCtx.Context)
 						return
 					}

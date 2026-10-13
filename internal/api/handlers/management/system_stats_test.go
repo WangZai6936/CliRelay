@@ -3,11 +3,30 @@ package management
 import (
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
 )
+
+func TestActiveAPIRequestCountIsLiveAndMissingReaderIsUnknown(t *testing.T) {
+	h := NewHandler(&config.Config{}, filepath.Join(t.TempDir(), "config.yaml"), nil)
+	t.Cleanup(h.Close)
+	if h.activeAPIRequestCount() != nil {
+		t.Fatal("unwired count must be unknown, not zero")
+	}
+	var active atomic.Int64
+	h.SetActiveAPIRequestsReader(active.Load)
+	active.Store(2)
+	if got := h.activeAPIRequestCount(); got == nil || *got != 2 {
+		t.Fatalf("live active count = %v, want 2", got)
+	}
+	active.Store(0)
+	if got := h.activeAPIRequestCount(); got == nil || *got != 0 {
+		t.Fatalf("live drained count = %v, want 0", got)
+	}
+}
 
 func TestCachedExpensiveSystemStatsAvoidsRepeatedLogDirectoryWalks(t *testing.T) {
 	logDir := t.TempDir()

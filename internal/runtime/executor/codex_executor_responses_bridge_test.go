@@ -179,8 +179,8 @@ func TestCodexExecutorExecuteStreamReturnsResponsesFailedError(t *testing.T) {
 			chunkErr = chunk.Err
 		}
 	}
-	if !strings.Contains(streamBody, "response.failed") {
-		t.Fatalf("stream body = %q, want response.failed forwarded", streamBody)
+	if streamBody != "" {
+		t.Fatalf("stream body = %q, failure before output must remain retryable through Err", streamBody)
 	}
 	if chunkErr == nil {
 		t.Fatal("stream error = nil, want response.failed error")

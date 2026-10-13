@@ -58,6 +58,8 @@ type Handler struct {
 	// importKinds overrides the credential-import exchanges in tests; nil uses
 	// the package defaults that build real upstream clients.
 	importKinds map[string]credentialImportKind
+
+	activeAPIRequestsReader func() int64
 }
 
 type trendCacheEntry struct {

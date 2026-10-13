@@ -11,7 +11,6 @@ package logging
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -71,7 +70,7 @@ func (l *FileRequestLogger) logRequest(url, method string, requestHeaders map[st
 	}
 	if requestBodyPath != "" {
 		defer func() {
-			if errRemove := os.Remove(requestBodyPath); errRemove != nil {
+			if errRemove := removeOwnedLogTemp(requestBodyPath); errRemove != nil {
 				log.WithError(errRemove).Warn("failed to remove request body temp file")
 			}
 		}()
@@ -82,10 +81,12 @@ func (l *FileRequestLogger) logRequest(url, method string, requestHeaders map[st
 		responseToWrite = response
 	}
 
-	logFile, errOpen := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	logFile, errOpen := openActiveLogFile(filePath)
 	if errOpen != nil {
 		return fmt.Errorf("failed to create log file: %w", errOpen)
 	}
+	releaseFile := releaseActiveLogFileOnce(filePath)
+	defer releaseFile()
 
 	writeErr := l.writeNonStreamingLog(
 		logFile,
@@ -114,6 +115,7 @@ func (l *FileRequestLogger) logRequest(url, method string, requestHeaders map[st
 	if writeErr != nil {
 		return fmt.Errorf("failed to write log file: %w", writeErr)
 	}
+	releaseFile()
 
 	if force && !l.enabled {
 		if errCleanup := l.cleanupOldErrorLogs(); errCleanup != nil {
@@ -153,9 +155,9 @@ func (l *FileRequestLogger) LogStreamingRequest(url, method string, headers map[
 		return nil, fmt.Errorf("failed to create request body temp file: %w", errTemp)
 	}
 
-	responseBodyFile, errCreate := os.CreateTemp(l.logsDir, "response-body-*.tmp")
+	responseBodyFile, errCreate := createActiveLogTemp(l.logsDir, "response-body-*.tmp")
 	if errCreate != nil {
-		_ = os.Remove(requestBodyPath)
+		_ = removeOwnedLogTemp(requestBodyPath)
 		return nil, fmt.Errorf("failed to create response body temp file: %w", errCreate)
 	}
 	responseBodyPath := responseBodyFile.Name()

@@ -115,6 +115,8 @@ type UpstreamSnapshot struct {
 	Method       string `json:"method,omitempty"`
 	Status       int    `json:"status,omitempty"`
 	ErrorMessage string `json:"error_message,omitempty"`
+	RequestID    string `json:"request_id,omitempty"`
+	CFRay        string `json:"cf_ray,omitempty"`
 }
 
 type ResponseSnapshot struct {
@@ -363,9 +365,7 @@ func SetUpstreamRequest(ctx context.Context, attempt int, provider, authID, auth
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.Upstream == nil {
-		d.Upstream = &UpstreamSnapshot{}
-	}
+	d.Upstream = &UpstreamSnapshot{}
 	d.Upstream.Attempt = attempt
 	d.Upstream.Provider = strings.TrimSpace(provider)
 	d.Upstream.AuthID = strings.TrimSpace(authID)
@@ -385,6 +385,34 @@ func SetUpstreamResponse(ctx context.Context, status int) {
 		d.Upstream = &UpstreamSnapshot{}
 	}
 	d.Upstream.Status = status
+}
+
+// Keep upstream correlation identifiers in compact diagnostics so body
+// retention cannot erase the identifiers needed to investigate a reset.
+func SetUpstreamResponseIdentifiers(ctx context.Context, headers http.Header) {
+	d := FromContext(ctx)
+	if d == nil {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.Upstream == nil {
+		d.Upstream = &UpstreamSnapshot{}
+	}
+	requestID := headers.Get("X-Request-Id")
+	if requestID == "" {
+		requestID = headers.Get("Request-Id")
+	}
+	d.Upstream.RequestID = boundedUpstreamIdentifier(requestID)
+	d.Upstream.CFRay = boundedUpstreamIdentifier(headers.Get("Cf-Ray"))
+}
+
+func boundedUpstreamIdentifier(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) > 256 {
+		value = value[:256]
+	}
+	return value
 }
 
 func SetUpstreamError(ctx context.Context, err error) {

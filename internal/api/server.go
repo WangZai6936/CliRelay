@@ -97,8 +97,9 @@ type Server struct {
 	proxyWarmManager   interface{ Stop() }
 	proxyWarmSignature string
 
-	draining         atomic.Bool
-	inFlightRequests atomic.Int64
+	draining          atomic.Bool
+	inFlightRequests  atomic.Int64
+	activeAPIRequests atomic.Int64
 
 	// clusterRuntime is this server's hold on the cluster wiring; nil on a
 	// single node.

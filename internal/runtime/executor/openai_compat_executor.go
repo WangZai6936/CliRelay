@@ -200,6 +200,11 @@ func (e *OpenAICompatExecutor) Execute(ctx context.Context, auth *cliproxyauth.A
 	}
 	recorder.AppendResponseChunk(body)
 	responseBody := unwrapOpenAICompatProviderEnvelope(body)
+	if responseErr := openAICompatResponseError(responseBody); responseErr != nil {
+		recorder.RecordResponseError(responseErr)
+		reporter.publishFailureWithContent(execCtx.Context, string(req.Payload), string(responseBody))
+		return resp, responseErr
+	}
 	// Preserve the clean, request-time model (ec.BaseModel) for the usage record.
 	// The upstream response's "model" field echoes a provider-internal path such as
 	// "accounts/fireworks/models/glm-5p2", which is not a valid model name for
@@ -358,7 +363,15 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 			// must not override the clean request-time model used for logging/cost.
 			lineForTranslation := unwrapOpenAICompatProviderEnvelopeSSELine(line)
 			data := bytes.TrimSpace(bytes.TrimPrefix(lineForTranslation, dataTag))
-			if bytes.Equal(data, []byte("[DONE]")) || gjson.GetBytes(data, "type").String() == "response.completed" || gjson.GetBytes(data, "choices.0.finish_reason").String() != "" {
+			if bytes.HasPrefix(lineForTranslation, dataTag) {
+				if responseErr := openAICompatResponseError(data); responseErr != nil {
+					recorder.RecordResponseError(responseErr)
+					reporter.publishFailure(execCtx.Context)
+					sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Err: responseErr})
+					return
+				}
+			}
+			if openAICompatStreamCompleted(data) {
 				completed = true
 			}
 			if detail, ok := parseOpenAIStreamUsage(lineForTranslation); ok {
@@ -424,11 +437,12 @@ func (e *OpenAICompatExecutor) ExecuteStream(ctx context.Context, auth *cliproxy
 			sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Err: errScan})
 			return
 		}
-		if hasUsage {
-			reporter.publish(execCtx.Context, lastUsage)
-		}
-		// Ensure we record the request if no usage chunk was ever seen
-		reporter.ensurePublished(execCtx.Context)
+		// EOF without a terminal event is an incomplete generation, even if an
+		// earlier chunk carried usage. Never synthesize a successful completion.
+		streamErr := openAICompatIncompleteStreamError()
+		recorder.RecordResponseError(streamErr)
+		reporter.publishFailure(execCtx.Context)
+		sendExecutorStreamChunk(execCtx.Context, out, cliproxyexecutor.StreamChunk{Err: streamErr})
 	}()
 	result := &cliproxyexecutor.StreamResult{Headers: httpResp.Header.Clone(), Chunks: out}
 	if fallback.Applied {

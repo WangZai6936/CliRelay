@@ -208,6 +208,7 @@ func (s *Server) configureManagementHandler(
 		return
 	}
 	s.mgmt = managementHandlers.NewHandler(cfg, configFilePath, authManager)
+	s.mgmt.SetActiveAPIRequestsReader(s.activeAPIRequests.Load)
 	s.mgmt.SetAccessManager(accessManager)
 	if optionState != nil && optionState.configMutatedCallback != nil {
 		s.mgmt.SetConfigMutatedHook(optionState.configMutatedCallback)

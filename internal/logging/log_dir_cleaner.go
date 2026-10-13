@@ -157,12 +157,12 @@ func enforceLogDirSizeLimit(logDir string, maxBytes int64, protectedPath string)
 		if protected != "" && filepath.Clean(file.path) == protected {
 			continue
 		}
-		if errRemove := os.Remove(file.path); errRemove != nil {
-			// Active stream may still hold the spool file open; skip and retry next cycle.
-			if isLogSpoolTempFileName(filepath.Base(file.path)) && !os.IsNotExist(errRemove) {
-				continue
-			}
+		removed, errRemove := removeInactiveLogFile(file.path)
+		if errRemove != nil {
 			log.WithError(errRemove).Warnf("logging: failed to remove old log file: %s", filepath.Base(file.path))
+			continue
+		}
+		if !removed {
 			continue
 		}
 		total -= file.size

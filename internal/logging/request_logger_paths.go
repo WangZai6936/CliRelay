@@ -116,7 +116,7 @@ func (l *FileRequestLogger) cleanupOldRequestLogs(errorOnly bool) error {
 			return files[i].modTime.After(files[j].modTime)
 		})
 		for _, file := range files[maxFiles:] {
-			if errRemove := os.Remove(filepath.Join(l.logsDir, file.name)); errRemove != nil {
+			if _, errRemove := removeInactiveLogFile(filepath.Join(l.logsDir, file.name)); errRemove != nil {
 				log.WithError(errRemove).Warnf("failed to remove old %s log: %s", kind, file.name)
 			}
 		}
@@ -130,7 +130,7 @@ func (l *FileRequestLogger) cleanupOldRequestLogs(errorOnly bool) error {
 }
 
 func (l *FileRequestLogger) writeRequestBodyTempFile(body []byte) (string, error) {
-	tmpFile, errCreate := os.CreateTemp(l.logsDir, "request-body-*.tmp")
+	tmpFile, errCreate := createActiveLogTemp(l.logsDir, "request-body-*.tmp")
 	if errCreate != nil {
 		return "", errCreate
 	}
@@ -138,11 +138,11 @@ func (l *FileRequestLogger) writeRequestBodyTempFile(body []byte) (string, error
 
 	if _, errCopy := io.Copy(tmpFile, bytes.NewReader(body)); errCopy != nil {
 		_ = tmpFile.Close()
-		_ = os.Remove(tmpPath)
+		_ = removeOwnedLogTemp(tmpPath)
 		return "", errCopy
 	}
 	if errClose := tmpFile.Close(); errClose != nil {
-		_ = os.Remove(tmpPath)
+		_ = removeOwnedLogTemp(tmpPath)
 		return "", errClose
 	}
 	return tmpPath, nil

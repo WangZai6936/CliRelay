@@ -30,6 +30,7 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 	s.configureInitialManagementRoutes(cfg)
 	s.configureInitialKeepAlive(optionState)
 	s.server = buildHTTPServer(cfg, engine)
+	s.server.Handler = s.trackActiveAPIRequests(s.server.Handler)
 	return s
 }
 

@@ -68,10 +68,14 @@ type SystemStats struct {
 	ChannelLatency []usage.ChannelLatency `json:"channel_latency"`
 
 	// Concurrency
+	// ActiveAPIRequests is a node-local HTTP handler count. Null means the
+	// server did not wire a reader; it must not be treated as a drained zero.
+	ActiveAPIRequests *int64                           `json:"active_api_requests"`
 	ActiveConcurrency []middleware.ConcurrencySnapshot `json:"active_concurrency"`
-	TotalInFlight     int64                            `json:"total_in_flight"`
-	TotalRPM          int                              `json:"total_rpm"`
-	TotalTPM          int64                            `json:"total_tpm"`
+	// TotalInFlight is a legacy recent-rate aggregate, not an active count.
+	TotalInFlight int64 `json:"total_in_flight"`
+	TotalRPM      int   `json:"total_rpm"`
+	TotalTPM      int64 `json:"total_tpm"`
 
 	// DBResilience shows how this node is riding out database trouble.
 	DBResilience DBResilienceStats `json:"db_resilience"`
@@ -253,7 +257,30 @@ func (h *Handler) collectSystemStats() SystemStats {
 		QuotaStaleDecisions: middleware.QuotaUsageStaleServed(),
 		TenantStaleChecks:   identity.TenantStaleServed(),
 	}
+	stats.ActiveAPIRequests = h.activeAPIRequestCount()
 	return stats
+}
+
+// SetActiveAPIRequestsReader binds the live node-local count. It is separate
+// from cached resource statistics, quota counters and cluster rate snapshots.
+func (h *Handler) SetActiveAPIRequestsReader(reader func() int64) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	h.activeAPIRequestsReader = reader
+	h.mu.Unlock()
+}
+
+func (h *Handler) activeAPIRequestCount() *int64 {
+	h.mu.Lock()
+	reader := h.activeAPIRequestsReader
+	h.mu.Unlock()
+	if reader == nil {
+		return nil
+	}
+	count := reader()
+	return &count
 }
 
 // GetSystemStats handles GET /v0/management/system-stats
