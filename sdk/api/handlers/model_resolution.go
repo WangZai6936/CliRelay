@@ -60,6 +60,23 @@ func RememberRequestModelResolution(c *gin.Context, resolution RequestModelResol
 		}
 	}
 	c.Set(RequestModelResolutionContextKey, resolution)
+	if _, async := c.Get(requestctx.GinKeyAsyncResponseStatus); async {
+		return
+	}
+	ApplyRequestModelResolutionHeaders(c)
+}
+
+// ApplyRequestModelResolutionHeaders is called by the HTTP owner after an
+// asynchronous startup. Workers retain the resolution in Gin's locked key map.
+func ApplyRequestModelResolutionHeaders(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	raw, _ := c.Get(RequestModelResolutionContextKey)
+	resolution, ok := raw.(RequestModelResolution)
+	if !ok {
+		return
+	}
 	if c.Writer != nil && !c.Writer.Written() {
 		c.Header("X-Clirelay-Resolved-Model", resolution.Model)
 		c.Header("X-Clirelay-Model-Fallback", resolution.Reason)

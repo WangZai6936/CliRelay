@@ -33,4 +33,12 @@ const (
 	// GinKeyFirstResponseAt stores the timestamp of the first downstream response
 	// chunk written to the client, used to derive first-token latency.
 	GinKeyFirstResponseAt = "cliproxy.first_response_at"
+
+	// GinKeyAsyncResponseStatus is the HTTP owner's status snapshot for stream
+	// workers. Its presence also defers model-resolution headers to that owner.
+	GinKeyAsyncResponseStatus = "cliproxy.async_response_status"
+
+	// GinKeyTransportHeartbeat marks HTTP keepalive writes so first application-byte
+	// timing does not mistake connection maintenance for generated content.
+	GinKeyTransportHeartbeat = "cliproxy.transport_heartbeat"
 )

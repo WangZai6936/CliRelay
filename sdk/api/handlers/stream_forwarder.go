@@ -114,7 +114,7 @@ func (h *BaseAPIHandler) ForwardStream(c *gin.Context, flusher http.Flusher, can
 			cancel(execErr)
 			return
 		case <-keepAliveC:
-			writeKeepAlive()
+			WriteStreamKeepAlive(c, writeKeepAlive)
 			flusher.Flush()
 		}
 	}

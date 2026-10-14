@@ -368,6 +368,7 @@ CliRelay/
 | [管理 API](https://help.router-for.me/management/api) | 管理接口的 REST 参考 |
 | [Amp CLI](https://help.router-for.me/agent-client/amp-cli.html) | 让 Amp CLI 与 IDE 扩展接入 CliRelay |
 | [生产检查清单](docs/production-checklist_CN.md) | 团队共享网关与 NAS 部署 |
+| [长请求与流式心跳](docs/streaming-timeouts_CN.md) | 入口读取超时、流式聚合与错误处理 |
 | [PostgreSQL / Redis 运行时](docs/postgres-redis-migration.md) | 运行时数据栈的搭建与验证 |
 | [多实例部署](docs/multi-instance-deployment_CN.md) | 多节点共享 PostgreSQL：故障转移、主库切换、滚动发布 |
 | [SDK 使用](docs/sdk-usage_CN.md) · [进阶](docs/sdk-advanced_CN.md) · [鉴权](docs/sdk-access_CN.md) · [监听](docs/sdk-watcher_CN.md) | 在 Go 应用中嵌入代理 |

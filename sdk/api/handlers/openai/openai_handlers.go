@@ -496,8 +496,16 @@ func (h *OpenAIAPIHandler) handleStreamingResponse(c *gin.Context, rawJSON []byt
 
 	modelName := gjson.GetBytes(rawJSON, "model").String()
 	cliCtx, cliCancel := h.GetContextWithCancel(h, c, c.Request.Context())
-	dataChan, upstreamHeaders, errChan, startErr := h.StartStreamWithAuthManager(cliCtx, h.HandlerType(), modelName, rawJSON, h.GetAlt(c))
+	dataChan, upstreamHeaders, errChan, startErr := h.StartStreamWithKeepAlive(c, cliCtx, h.HandlerType(), modelName, rawJSON, h.GetAlt(c))
+	if cliCtx.Err() != nil {
+		cliCancel(cliCtx.Err())
+		return
+	}
 	if startErr != nil {
+		if handlers.IsStreamStartupDeliveryError(startErr.Error) {
+			cliCancel(startErr.Error)
+			return
+		}
 		h.WriteErrorResponse(c, startErr)
 		cliCancel(startErr.Error)
 		return
@@ -566,8 +574,16 @@ func (h *OpenAIAPIHandler) handleCompletionsStreamingResponse(c *gin.Context, ra
 
 	modelName := gjson.GetBytes(chatCompletionsJSON, "model").String()
 	cliCtx, cliCancel := h.GetContextWithCancel(h, c, c.Request.Context())
-	dataChan, upstreamHeaders, errChan, startErr := h.StartStreamWithAuthManager(cliCtx, h.HandlerType(), modelName, chatCompletionsJSON, "")
+	dataChan, upstreamHeaders, errChan, startErr := h.StartStreamWithKeepAlive(c, cliCtx, h.HandlerType(), modelName, chatCompletionsJSON, "")
+	if cliCtx.Err() != nil {
+		cliCancel(cliCtx.Err())
+		return
+	}
 	if startErr != nil {
+		if handlers.IsStreamStartupDeliveryError(startErr.Error) {
+			cliCancel(startErr.Error)
+			return
+		}
 		h.WriteErrorResponse(c, startErr)
 		cliCancel(startErr.Error)
 		return

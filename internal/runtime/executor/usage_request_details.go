@@ -14,6 +14,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
+	"github.com/router-for-me/CLIProxyAPI/v6/sdk/requestctx"
 )
 
 func apiKeyFromContext(ctx context.Context) string {
@@ -66,7 +67,9 @@ func usageRequestMetadata(ctx context.Context) (identifier, requestID string, re
 			identifier = method + " " + path
 		}
 	}
-	if ginCtx.Writer != nil {
+	if snapshot, async := ginCtx.Get(requestctx.GinKeyAsyncResponseStatus); async {
+		responseStatus, _ = snapshot.(int)
+	} else if ginCtx.Writer != nil {
 		responseStatus = ginCtx.Writer.Status()
 	}
 	return identifier, requestID, responseStatus

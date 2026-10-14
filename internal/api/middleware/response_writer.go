@@ -15,6 +15,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/interfaces"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
+	"github.com/router-for-me/CLIProxyAPI/v6/sdk/requestctx"
 )
 
 const requestBodyOverrideContextKey = "REQUEST_BODY_OVERRIDE"
@@ -229,12 +230,16 @@ func (w *ResponseWriterWrapper) captureCurrentHeaders() {
 }
 
 func (w *ResponseWriterWrapper) markFirstResponseWrite() {
-	if !w.firstChunkTimestamp.IsZero() {
+	timestamp := time.Now()
+	if w.firstChunkTimestamp.IsZero() {
+		w.firstChunkTimestamp = timestamp
+	}
+	if w.ginCtx == nil || w.ginCtx.GetBool(requestctx.GinKeyTransportHeartbeat) {
 		return
 	}
-	timestamp := time.Now()
-	w.firstChunkTimestamp = timestamp
-	if w.ginCtx != nil {
+	// Transport activity counts toward TTFB, while usage's first-content
+	// timestamp waits for the first application write and remains unchanged.
+	if _, exists := w.ginCtx.Get(util.GinKeyFirstResponseAt); !exists {
 		w.ginCtx.Set(util.GinKeyFirstResponseAt, timestamp)
 	}
 }
