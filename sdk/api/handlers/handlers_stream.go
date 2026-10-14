@@ -30,11 +30,13 @@ func (h *BaseAPIHandler) ExecuteStreamWithAuthManager(ctx context.Context, handl
 // Errors returned directly from this method happen before any downstream stream
 // bytes are written, so HTTP handlers can still return a normal JSON error.
 func (h *BaseAPIHandler) StartStreamWithAuthManager(ctx context.Context, handlerType, modelName string, rawJSON []byte, alt string) (<-chan []byte, http.Header, <-chan *StreamErrorMessage, *StreamErrorMessage) {
+	usage.ObserveRequestPhase(ctx, "model_resolution")
 	providers, normalizedModel, errMsg := h.getRequestDetails(ctx, modelName)
 	if errMsg != nil {
 		return nil, nil, nil, errMsg
 	}
 	maxBootstrapRetries := StreamingBootstrapRetries(h.Cfg)
+	ctx = coreauth.WithRequestBufferRecovery(ctx)
 	if h.Cfg != nil && h.Cfg.Streaming.MaxAttempts > 0 {
 		timeout := h.Cfg.Streaming.RecoveryTimeoutSeconds
 		if timeout <= 0 {
@@ -70,7 +72,7 @@ func (h *BaseAPIHandler) StartStreamWithAuthManager(ctx context.Context, handler
 		}
 	}
 	if err != nil {
-		usage.MarkRequestFailed(ctx)
+		usage.MarkRequestFailedWithError(ctx, err)
 		status := http.StatusInternalServerError
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			status = 499 // Client Closed Request
@@ -139,7 +141,7 @@ func forwardStreamWithoutBootstrapRetry(
 			return
 		}
 		if chunk.Err != nil {
-			usage.MarkRequestFailed(ctx)
+			usage.MarkRequestFailedWithError(ctx, chunk.Err)
 			_ = sendStreamErr(ctx, errChan, streamErrorMessageFromErr(chunk.Err))
 			return
 		}
@@ -148,7 +150,8 @@ func forwardStreamWithoutBootstrapRetry(
 		}
 		if handlerType == "openai-response" {
 			if err := validateSSEDataJSON(chunk.Payload); err != nil {
-				usage.MarkRequestFailed(ctx)
+				usage.MarkRequestFailedWithError(ctx, err)
+				usage.ObserveRequestError(ctx, http.StatusBadGateway, err)
 				_ = sendStreamErr(ctx, errChan, &StreamErrorMessage{StatusCode: http.StatusBadGateway, Error: err})
 				return
 			}
@@ -219,7 +222,7 @@ outer:
 					}
 					streamErr = retryErr
 				}
-				usage.MarkRequestFailed(ctx)
+				usage.MarkRequestFailedWithError(ctx, streamErr)
 				_ = sendStreamErr(ctx, errChan, streamErrorMessageFromErr(streamErr))
 				return
 			}
@@ -228,7 +231,8 @@ outer:
 			}
 			if handlerType == "openai-response" {
 				if err := validateSSEDataJSON(chunk.Payload); err != nil {
-					usage.MarkRequestFailed(ctx)
+					usage.MarkRequestFailedWithError(ctx, err)
+					usage.ObserveRequestError(ctx, http.StatusBadGateway, err)
 					_ = sendStreamErr(ctx, errChan, &StreamErrorMessage{StatusCode: http.StatusBadGateway, Error: err})
 					return
 				}
@@ -285,9 +289,6 @@ func sendStreamData(ctx context.Context, dataChan chan<- []byte, chunk []byte) b
 }
 
 func bootstrapEligibleStreamErr(err error) bool {
-	if coreexecutor.IsUpstreamRequestBufferLimit(err) {
-		return false
-	}
 	status := statusFromError(err)
 	if status == 0 {
 		return true

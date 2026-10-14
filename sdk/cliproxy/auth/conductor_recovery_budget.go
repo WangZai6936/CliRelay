@@ -224,6 +224,9 @@ func (b *RequestRecoveryBudget) authRetryAllowed(auth *Auth, defaultRetry int) b
 // RecoverStream retries a pre-output stream failure using the same budget as
 // initial HTTP failures. Selection still applies tenant/channel/group/model gates.
 func (m *Manager) RecoverStream(ctx context.Context, providers []string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, previous error) (*cliproxyexecutor.StreamResult, error) {
+	if isSinglePickRouteRequest(opts.Metadata) || isRequestInvalidError(previous) || isContentPolicyViolation(previous) {
+		return nil, previous
+	}
 	b := RecoveryBudgetFromContext(ctx)
 	if b == nil {
 		return m.ExecuteStream(ctx, providers, req, opts)

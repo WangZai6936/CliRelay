@@ -37,6 +37,7 @@ func laterRuntimeMigrations() []Migration {
 		{Version: "202609250007_management_jobs", SQL: managementJobsSQL},
 		{Version: "202609250008_warmup_policies", SQL: warmupPoliciesSQL},
 		{Version: "202610130001_request_outcomes", SQL: requestOutcomeSQL},
+		{Version: "202610140001_request_failure_diagnostics", SQL: requestFailureSQL},
 	}
 }
 

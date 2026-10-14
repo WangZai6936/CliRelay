@@ -16,7 +16,7 @@
 <div class="card"><span>重试后成功</span><strong class="good" id="recovered_requests">—</strong><small>自动恢复的请求</small></div>
 <div class="card"><span>最终失败</span><strong class="bad" id="final_failed_requests">—</strong><small>未恢复的上游错误或断流</small></div>
 <div class="card"><span>上游失败尝试</span><strong id="failed_attempts">—</strong><small>当前已关联请求的失败尝试</small></div>
-<div class="card"><span>客户端取消</span><strong id="client_canceled_requests">—</strong><small>客户端主动中止连接</small></div>
+<div class="card"><span>客户端取消</span><strong id="client_canceled_requests">—</strong><small>调用端或入口中止连接</small></div>
 <div class="card"><span>客户端交付失败</span><strong id="client_delivery_failed_requests">—</strong><small>向客户端写入失败</small></div>
 <div class="card"><span>结果未知</span><strong id="unknown_requests">—</strong><small>尚未结束或缺少终态证据</small></div>
 <div class="card"><span>历史未关联尝试</span><strong id="unknown_legacy_attempts">—</strong><small>历史记录不推断最终失败</small></div>
@@ -24,10 +24,10 @@
 <section class="panel" aria-label="请求结果列表">
 <form id="filters" class="filters"><label>统计范围<select id="days"><option value="1">1 天</option><option value="7">7 天</option><option value="30">30 天</option></select></label><label>模型<input id="model" placeholder="全部模型" maxlength="200"></label><label>最终结果<select id="result"><option value="">全部结果</option><option value="failed">最终失败</option><option value="recovered">重试后成功</option><option value="succeeded">直接成功</option><option value="client_canceled">客户端取消</option><option value="client_delivery_failed">客户端交付失败</option><option value="unknown">结果未知</option></select></label><button id="refresh" type="submit">刷新</button></form>
 <div id="status" class="status" role="status" aria-live="polite">正在读取请求结果…</div>
-<div class="table-region" role="region" aria-label="请求结果，可横向滚动" tabindex="0"><table><thead><tr><th>开始时间</th><th>模型</th><th>结果</th><th>阶段</th><th>上游尝试</th><th>失败尝试</th><th>请求 ID</th></tr></thead><tbody id="rows"></tbody></table></div>
+<div class="table-region" role="region" aria-label="请求结果，可横向滚动" tabindex="0"><table><thead><tr><th>开始时间</th><th>模型</th><th>结果</th><th>阶段</th><th>HTTP / 错误状态</th><th>错误原因</th><th>上游尝试</th><th>失败尝试</th><th>请求 ID</th></tr></thead><tbody id="rows"></tbody></table></div>
 <div class="pager"><button id="prev" type="button" disabled>上一页</button><span id="page">第 1 页</span><button id="next" type="button" disabled>下一页</button></div>
 </section>
-<p class="note">统计日期采用服务端日界限。请求结果从本次升级后开始记录；尚未结束或缺少终态的请求显示为未知；历史未关联尝试不代表最终失败。客户端取消和交付失败单独统计。成功表示服务端正常完成写入。</p>
+<p class="note">统计日期采用服务端日界限。请求结果从本次升级后开始记录；尚未结束或缺少终态的请求显示为未知；历史未关联尝试不代表最终失败。客户端取消和交付失败单独统计。成功表示服务端正常完成写入。HTTP 状态表示已发送给调用端的响应码，错误状态表示终态错误码；流式响应可能是 HTTP 200 后再发生错误。历史记录缺失的原因无法追溯补齐。</p>
 <p class="note" id="login" hidden>管理会话已过期或尚未登录，请<a href="/manage">返回管理面板登录</a>后重新打开此页。</p>
 </main>
 <script>
@@ -36,6 +36,8 @@
 const ids=['succeeded_requests','recovered_requests','final_failed_requests','failed_attempts','client_canceled_requests','client_delivery_failed_requests','unknown_requests','unknown_legacy_attempts'];
 const labels={succeeded:'直接成功',recovered:'重试后成功',failed:'最终失败',client_canceled:'客户端取消',client_delivery_failed:'客户端交付失败',unknown:'结果未知'};
 const stage={before_output:'输出前',after_output:'输出中'};
+const phases={admission:'请求准入',model_resolution:'模型解析',account_selection:'账号选择',account_queue:'并发排队',cooldown_wait:'冷却等待',upstream:'上游执行'};
+const reasons={no_eligible_account:'没有符合路由条件的账号',accounts_cooling_down:'账号处于冷却期',recovery_budget_exhausted:'恢复次数或等待时间已耗尽',model_unavailable:'模型不可用',upstream_overloaded:'上游过载',upstream_retry_buffer_exhausted:'上游重试缓冲超限',peer_reset_during_http2_stream:'对端重置 HTTP/2 流',request_context_canceled:'请求上下文被中止',request_deadline_exceeded:'请求截止时间已到',downstream_write_failed:'向调用端写入失败',request_rate_limited:'请求被限流',authentication_rejected:'身份认证被拒绝',request_not_permitted:'请求权限不足',request_validation_failed:'请求参数校验失败',request_body_limit_exceeded:'请求体大小超限',unclassified_failure:'原因尚未归类'};
 let page=1,total=0,abort;
 const el=id=>document.getElementById(id);
 function auth(){for(const name of ['sessionStorage','localStorage']){try{const r=JSON.parse(window[name].getItem('code-proxy-admin-auth')||'null');if(!r||typeof r.managementKey!=='string'||!r.managementKey)continue;if(r.expiresAt&&r.expiresAt<=Date.now())continue;if(r.apiBase&&new URL(r.apiBase,location.origin).origin!==location.origin)continue;return r;}catch{}}return null;}
@@ -48,8 +50,8 @@ const headers={Authorization:'Bearer '+a.managementKey};const tenant=a.effective
 const response=await fetch('/v0/management/request-outcomes?'+params,{headers,signal:active.signal,cache:'no-store'});
 if(response.status===401){el('login').hidden=false;throw Error('管理会话已过期，请重新登录。');}if(response.status===403)throw Error('当前账户没有查看请求日志的权限。');if(!response.ok)throw Error('读取失败（HTTP '+response.status+'），请稍后重试。');
 const data=await response.json();if(active!==abort)return;total=Number(data.total)||0;const stats=data.stats||{};for(const id of ids)el(id).textContent=Number(stats[id]||0).toLocaleString();const body=el('rows');body.replaceChildren();
-for(const r of data.items||[]){const tr=document.createElement('tr');cell(tr,new Date(r.timestamp).toLocaleString('zh-CN',{hour12:false}));cell(tr,r.model||'—');const td=document.createElement('td'),badge=document.createElement('span');badge.className='badge'+(r.result==='failed'?' bad':r.result==='recovered'?' good':'');badge.textContent=labels[r.result]||'结果未知';td.append(badge);tr.append(td);cell(tr,stage[r.failure_stage]||'—');cell(tr,String(r.attempts||0));cell(tr,String(r.failed_attempts||0));cell(tr,r.request_id||'—',true);body.append(tr);}
-if(!body.children.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=7;td.className='empty';td.textContent='当前筛选条件下暂无已完成请求。升级后的请求完成后会显示在这里。';tr.append(td);body.append(tr);}
+for(const r of data.items||[]){const tr=document.createElement('tr');cell(tr,new Date(r.timestamp).toLocaleString('zh-CN',{hour12:false}));cell(tr,r.model||'—');const td=document.createElement('td'),badge=document.createElement('span');badge.className='badge'+(r.result==='failed'?' bad':r.result==='recovered'?' good':'');badge.textContent=labels[r.result]||'结果未知';td.append(badge);tr.append(td);cell(tr,[stage[r.failure_stage],phases[r.error_phase]].filter(Boolean).join(' / ')||'—');cell(tr,(r.response_status||'—')+' / '+(r.error_status||'—'));cell(tr,r.error_code?((reasons[r.error_reason]||'原因尚未归类')+' · '+r.error_code):(r.result==='failed'?'历史记录缺少原因':'—'));cell(tr,String(r.attempts||0));cell(tr,String(r.failed_attempts||0));cell(tr,r.request_id||'—',true);body.append(tr);}
+if(!body.children.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=9;td.className='empty';td.textContent='当前筛选条件下暂无已完成请求。升级后的请求完成后会显示在这里。';tr.append(td);body.append(tr);}
 el('status').textContent='共 '+total.toLocaleString()+' 个请求 · '+new Date().toLocaleTimeString('zh-CN',{hour12:false})+' 更新';el('page').textContent='第 '+page+' / '+Math.max(1,Math.ceil(total/50))+' 页';el('prev').disabled=page<=1;el('next').disabled=page*50>=total;
 }catch(error){if(active!==abort)return;el('status').classList.add('error');el('status').textContent=error.name==='AbortError'?'读取超时，请刷新重试。':error.message;for(const id of ids)el(id).textContent='—';el('rows').replaceChildren();}finally{clearTimeout(timeout);if(active===abort)el('refresh').disabled=false;}}
 el('filters').addEventListener('submit',e=>{e.preventDefault();page=1;load();});el('prev').addEventListener('click',()=>{if(page>1){page--;load();}});el('next').addEventListener('click',()=>{if(page*50<total){page++;load();}});window.addEventListener('pagehide',()=>abort?.abort());load();

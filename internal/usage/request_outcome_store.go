@@ -25,7 +25,15 @@ func ensureRequestOutcomeSchema(db *sql.DB) error {
 	 channel_name TEXT NOT NULL DEFAULT '', result TEXT NOT NULL, failure_stage TEXT NOT NULL DEFAULT '',
 	 attempts BIGINT NOT NULL DEFAULT 0, failed_attempts BIGINT NOT NULL DEFAULT 0, PRIMARY KEY(tenant_id, request_id));
 	CREATE INDEX IF NOT EXISTS idx_request_outcomes_tenant_time ON request_outcomes(tenant_id, timestamp);`)
-	return err
+	if err != nil {
+		return err
+	}
+	for _, column := range []string{"response_status INTEGER NOT NULL DEFAULT 0", "error_status INTEGER NOT NULL DEFAULT 0", "error_code TEXT NOT NULL DEFAULT ''", "error_type TEXT NOT NULL DEFAULT ''", "error_reason TEXT NOT NULL DEFAULT ''", "error_phase TEXT NOT NULL DEFAULT ''"} {
+		if _, err := db.Exec("ALTER TABLE request_outcomes ADD COLUMN " + column); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate") {
+			return fmt.Errorf("usage: add terminal diagnostics: %w", err)
+		}
+	}
+	return nil
 }
 
 func insertRequestOutcomeTx(tx usageWriteTx, plan requestLogWritePlan) error {
@@ -39,11 +47,11 @@ func insertRequestOutcomeTx(tx usageWriteTx, plan requestLogWritePlan) error {
 		return fmt.Errorf("usage: invalid request outcome %q", o.Result)
 	}
 	_, err := tx.Exec(`INSERT INTO request_outcomes
-	(tenant_id, request_id, timestamp, completed_at, api_key, api_key_id, api_key_name, model, auth_index, auth_subject_id, channel_name, result, failure_stage, attempts, failed_attempts)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	(tenant_id, request_id, timestamp, completed_at, api_key, api_key_id, api_key_name, model, auth_index, auth_subject_id, channel_name, result, failure_stage, attempts, failed_attempts, response_status, error_status, error_code, error_type, error_reason, error_phase)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(tenant_id, request_id) DO NOTHING`, plan.tenantID, o.RequestID, o.StartedAt.UTC().Format(time.RFC3339Nano), o.CompletedAt.UTC().Format(time.RFC3339Nano),
 		plan.entry.APIKey, plan.entry.APIKeyID, plan.entry.APIKeyName, plan.entry.Model, plan.entry.AuthIndex, plan.entry.AuthSubjectID, plan.entry.ChannelName,
-		o.Result, o.FailureStage, o.Attempts, o.FailedAttempts)
+		o.Result, o.FailureStage, o.Attempts, o.FailedAttempts, o.ResponseStatus, o.ErrorStatus, o.ErrorCode, o.ErrorType, o.ErrorReason, o.ErrorPhase)
 	return err
 }
 

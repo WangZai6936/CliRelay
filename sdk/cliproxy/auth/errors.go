@@ -35,6 +35,14 @@ func (e *Error) StatusCode() int {
 	return e.HTTPStatus
 }
 
+// ErrorCode exposes the machine cause without parsing or persisting messages.
+func (e *Error) ErrorCode() string {
+	if e == nil {
+		return ""
+	}
+	return e.Code
+}
+
 func errorsEqual(left, right *Error) bool {
 	if left == nil || right == nil {
 		return left == right

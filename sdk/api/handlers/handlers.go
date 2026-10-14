@@ -614,6 +614,8 @@ func appendAPIResponse(c *gin.Context, data []byte) {
 // ExecuteWithAuthManager executes a non-streaming request via the core auth manager.
 // This path is the only supported execution route.
 func (h *BaseAPIHandler) ExecuteWithAuthManager(ctx context.Context, handlerType, modelName string, rawJSON []byte, alt string) ([]byte, http.Header, *interfaces.ErrorMessage) {
+	ctx = coreauth.WithRequestBufferRecovery(ctx)
+	requestusage.ObserveRequestPhase(ctx, "model_resolution")
 	providers, normalizedModel, errMsg := h.getRequestDetails(ctx, modelName)
 	if errMsg != nil {
 		return nil, nil, errMsg
@@ -667,6 +669,7 @@ func (h *BaseAPIHandler) ExecuteWithAuthManager(ctx context.Context, handlerType
 // ExecuteCountWithAuthManager executes a non-streaming request via the core auth manager.
 // This path is the only supported execution route.
 func (h *BaseAPIHandler) ExecuteCountWithAuthManager(ctx context.Context, handlerType, modelName string, rawJSON []byte, alt string) ([]byte, http.Header, *interfaces.ErrorMessage) {
+	requestusage.ObserveRequestPhase(ctx, "model_resolution")
 	providers, normalizedModel, errMsg := h.getRequestDetails(ctx, modelName)
 	if errMsg != nil {
 		return nil, nil, errMsg
@@ -894,7 +897,7 @@ func (h *BaseAPIHandler) getRequestDetails(ctx context.Context, modelName string
 	}
 
 	if len(providers) == 0 {
-		return nil, "", &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: fmt.Errorf("unknown provider for model %s", modelName)}
+		return nil, "", &interfaces.ErrorMessage{StatusCode: http.StatusBadGateway, Error: &coreauth.Error{Code: "model_not_found", HTTPStatus: http.StatusBadGateway, Message: fmt.Sprintf("unknown provider for model %s", modelName)}}
 	}
 
 	// Strip context-window markers while preserving round-bracket thinking
@@ -962,6 +965,14 @@ func (h *BaseAPIHandler) WriteErrorResponse(c *gin.Context, msg *interfaces.Erro
 		}
 	}
 
+	if c != nil && c.Request != nil {
+		var cause error
+		if msg != nil {
+			cause = msg.Error
+		}
+		requestusage.ObserveRequestError(c.Request.Context(), status, cause)
+		requestusage.MarkRequestFailed(c.Request.Context())
+	}
 	body := BuildErrorResponseBody(status, errText)
 	// Append first to preserve upstream response logs, then drop duplicate payloads if already recorded.
 	var previous []byte

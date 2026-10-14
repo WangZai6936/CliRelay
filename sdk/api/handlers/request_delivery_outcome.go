@@ -79,7 +79,7 @@ func markRequestDeliveryOutcome(c *gin.Context, ctx context.Context, params ...i
 	}
 	for _, param := range params {
 		if err, ok := param.(error); ok && err != nil {
-			requestusage.MarkRequestFailed(ctx)
+			requestusage.MarkRequestFailedWithError(ctx, err)
 			return
 		}
 	}

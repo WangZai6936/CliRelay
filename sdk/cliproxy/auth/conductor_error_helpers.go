@@ -122,9 +122,6 @@ func isRequestInvalidError(err error) bool {
 		return false
 	}
 	status := statusCodeFromError(err)
-	if status == http.StatusInsufficientStorage && cliproxyexecutor.IsUpstreamRequestBufferLimit(err) {
-		return true
-	}
 	if status != http.StatusBadRequest {
 		return false
 	}

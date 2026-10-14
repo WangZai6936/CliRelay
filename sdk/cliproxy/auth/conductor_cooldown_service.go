@@ -226,10 +226,9 @@ func (s cooldownService) applyFailureLocked(auth *Auth, result Result, now time.
 	if auth == nil {
 		return
 	}
-	// Client request errors (400 invalid payload/image/etc.) are not auth health
-	// signals. Do not mark the credential unavailable or start any cooldown;
-	// failover is already suppressed by isRequestInvalidError.
-	if result.Error != nil && isRequestInvalidError(result.Error) {
+	// Validation errors and request-specific buffer rejections are not auth
+	// health signals. Buffer recovery is capped independently per request.
+	if result.Error != nil && (isRequestInvalidError(result.Error) || isUpstreamBufferRejection(result.Error)) {
 		return
 	}
 	if applyClaudeOAuthFailureLocked(auth, result, now, effects) {

@@ -11,6 +11,7 @@ import (
 // RequestOutcomeRow contains client request results without prompts, response
 // bodies, credential secrets, or dependence on compressed log content.
 type RequestOutcomeRow struct {
+	coreusage.RequestFailure
 	RequestID      string     `json:"request_id"`
 	Timestamp      time.Time  `json:"timestamp"`
 	CompletedAt    *time.Time `json:"completed_at"`
@@ -69,14 +70,14 @@ func QueryRequestOutcomes(params LogQueryParams, results []string) (RequestOutco
 	if err := db.QueryRow("SELECT COUNT(*) FROM "+requestOutcomeReadModelSQL+where, readArgs...).Scan(&result.Total); err != nil {
 		return result, err
 	}
-	rows, err := db.Query(`SELECT request_id, timestamp, completed_at, api_key_id, api_key_name, model, result, failure_stage, attempts, failed_attempts FROM `+requestOutcomeReadModelSQL+where+` ORDER BY timestamp DESC LIMIT ? OFFSET ?`, append(readArgs, params.Size, (params.Page-1)*params.Size)...)
+	rows, err := db.Query(`SELECT request_id, timestamp, completed_at, api_key_id, api_key_name, model, result, failure_stage, attempts, failed_attempts, response_status, error_status, error_code, error_type, error_reason, error_phase FROM `+requestOutcomeReadModelSQL+where+` ORDER BY timestamp DESC LIMIT ? OFFSET ?`, append(readArgs, params.Size, (params.Page-1)*params.Size)...)
 	if err != nil {
 		return result, err
 	}
 	for rows.Next() {
 		var row RequestOutcomeRow
 		var start, completed storedTime
-		if err := rows.Scan(&row.RequestID, &start, &completed, &row.APIKeyID, &row.APIKeyName, &row.Model, &row.Result, &row.FailureStage, &row.Attempts, &row.FailedAttempts); err != nil {
+		if err := rows.Scan(&row.RequestID, &start, &completed, &row.APIKeyID, &row.APIKeyName, &row.Model, &row.Result, &row.FailureStage, &row.Attempts, &row.FailedAttempts, &row.ResponseStatus, &row.ErrorStatus, &row.ErrorCode, &row.ErrorType, &row.ErrorReason, &row.ErrorPhase); err != nil {
 			rows.Close()
 			return result, err
 		}

@@ -47,7 +47,10 @@ func (e *recoverySequenceExecutor) ExecuteStream(ctx context.Context, a *coreaut
 	if mode == "http503" {
 		err = &coreauth.Error{HTTPStatus: 503, Code: "temporarily_unavailable", Message: "maintenance"}
 	}
-	if mode == "http" || mode == "http503" {
+	if mode == "http507" || mode == "sse507" || mode == "partial507" {
+		err = &coreauth.Error{HTTPStatus: 507, Message: "exceeded request buffer limit while retrying upstream"}
+	}
+	if mode == "http" || mode == "http503" || mode == "http507" {
 		return nil, err
 	}
 	ch := make(chan coreexecutor.StreamChunk, 2)
@@ -60,7 +63,7 @@ func (e *recoverySequenceExecutor) ExecuteStream(ctx context.Context, a *coreaut
 			case <-time.After(e.beforeOutput):
 			}
 		}
-		if mode == "ok" || mode == "partial" {
+		if mode == "ok" || mode == "partial" || mode == "partial507" {
 			ch <- coreexecutor.StreamChunk{Payload: []byte("ok")}
 		}
 		if mode != "ok" {
@@ -91,8 +94,10 @@ func consumeRecoverySequence(t *testing.T, h *BaseAPIHandler, ctx context.Contex
 	t.Helper()
 	data, _, errs := h.ExecuteStreamWithAuthManager(ctx, "openai", "recovery-model", []byte(`{"model":"recovery-model"}`), "")
 	var output string
-	for payload := range data {
-		output += string(payload)
+	if data != nil {
+		for payload := range data {
+			output += string(payload)
+		}
 	}
 	var terminal *StreamErrorMessage
 	for err := range errs {
@@ -175,6 +180,32 @@ func TestStreamRecoveryDoesNotTimeoutHealthyRetryGeneration(t *testing.T) {
 	output, err := consumeRecoverySequence(t, h, context.Background())
 	if output != "ok" || err != nil || len(e.auths) != 2 {
 		t.Fatalf("output=%q err=%v calls=%d", output, err, len(e.auths))
+	}
+}
+
+func TestBufferRecoveryAcrossHTTPAndSSEStopsAfterOneAlternative(t *testing.T) {
+	for _, modes := range [][]string{{"http507", "ok"}, {"sse507", "ok"}, {"http507", "http507", "ok"}, {"sse507", "sse507", "ok"}, {"http507", "sse507", "ok"}, {"partial507", "ok"}} {
+		t.Run(modes[0]+"-"+modes[1], func(t *testing.T) {
+			e := &recoverySequenceExecutor{modes: modes}
+			h, _ := newRecoverySequenceHandler(t, e, false)
+			output, err := consumeRecoverySequence(t, h, context.Background())
+			if modes[0] == "partial507" {
+				if output != "ok" || err == nil || len(e.auths) != 1 {
+					t.Fatalf("partial replay: output=%q err=%v calls=%v", output, err, e.auths)
+				}
+				return
+			}
+			if len(e.auths) != 2 || e.auths[0] == e.auths[1] {
+				t.Fatalf("calls=%v", e.auths)
+			}
+			if modes[1] == "ok" {
+				if output != "ok" || err != nil {
+					t.Fatalf("output=%q err=%v", output, err)
+				}
+			} else if output != "" || err == nil {
+				t.Fatalf("output=%q err=%v", output, err)
+			}
+		})
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
+	requestusage "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/usage"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator"
 )
 
@@ -66,6 +67,7 @@ func runExecutionWithRetry[T any](
 	executeOnce func(context.Context, []string, cliproxyexecutor.Request, cliproxyexecutor.Options) (T, error),
 ) (T, error) {
 	var zero T
+	ctx = WithRequestBufferRecovery(ctx)
 	if opts.Metadata == nil {
 		opts.Metadata = make(map[string]any)
 	}
@@ -86,6 +88,9 @@ func runExecutionWithRetry[T any](
 			return resp, nil
 		}
 		lastErr = errExec
+		if bufferRecoveryFrom(ctx).active() {
+			break
+		}
 		var wait time.Duration
 		var shouldRetry bool
 		if budget != nil {
@@ -105,6 +110,7 @@ func runExecutionWithRetry[T any](
 		if !shouldRetry {
 			break
 		}
+		requestusage.ObserveRequestPhase(ctx, "cooldown_wait")
 		if errWait := waitForCooldown(ctx, wait); errWait != nil {
 			return zero, errWait
 		}
@@ -122,6 +128,9 @@ func (s executionService) executeMixedOnce(ctx context.Context, providers []stri
 	}
 
 	for {
+		if state := bufferRecoveryFrom(ctx); !state.available(ctx) {
+			return cliproxyexecutor.Response{}, state.failure(ctx)
+		}
 		if budget := RecoveryBudgetFromContext(ctx); budget != nil && !budget.available(ctx, 0) {
 			return cliproxyexecutor.Response{}, budget.exhaustedError(ctx)
 		}
@@ -136,6 +145,11 @@ func (s executionService) executeMixedOnce(ctx context.Context, providers []stri
 				return cliproxyexecutor.Response{}, errBudget
 			}
 		}
+		if err := bufferRecoveryFrom(ctx).consume(ctx, candidate.auth.ID); err != nil {
+			releaseSlot()
+			return cliproxyexecutor.Response{}, err
+		}
+		requestusage.ObserveRequestPhase(ctx, "upstream")
 		startedAt := time.Now()
 		resp, errExec := candidate.executor.Execute(candidate.execCtx, candidate.auth, candidate.execReq, scope.opts)
 		releaseSlot()
@@ -150,6 +164,7 @@ func (s executionService) executeMixedOnce(ctx context.Context, providers []stri
 			if errCtx := candidate.execCtx.Err(); errCtx != nil {
 				return cliproxyexecutor.Response{}, errCtx
 			}
+			bufferRecoveryFrom(ctx).recordFailure(candidate.auth.ID, errExec)
 			result.Error = errorFromExecution(errExec)
 			RecoveryBudgetFromContext(ctx).recordFailure(errExec)
 			result.Headers = headersFromError(errExec)
@@ -177,11 +192,19 @@ func (s executionService) executeCountMixedOnce(ctx context.Context, providers [
 	}
 
 	for {
+		if state := bufferRecoveryFrom(ctx); !state.available(ctx) {
+			return cliproxyexecutor.Response{}, state.failure(ctx)
+		}
 		candidate, releaseSlot, errReady := s.nextReadyCandidate(ctx, &scope, req)
 		if errReady != nil {
 			return cliproxyexecutor.Response{}, errReady
 		}
 
+		if err := bufferRecoveryFrom(ctx).consume(ctx, candidate.auth.ID); err != nil {
+			releaseSlot()
+			return cliproxyexecutor.Response{}, err
+		}
+		requestusage.ObserveRequestPhase(ctx, "upstream")
 		resp, errExec := candidate.executor.CountTokens(candidate.execCtx, candidate.auth, candidate.execReq, scope.opts)
 		releaseSlot()
 		if errExec != nil {
@@ -191,6 +214,7 @@ func (s executionService) executeCountMixedOnce(ctx context.Context, providers [
 			if isRequestInvalidError(errExec) || scope.singlePickRoute {
 				return cliproxyexecutor.Response{}, errExec
 			}
+			bufferRecoveryFrom(ctx).recordFailure(candidate.auth.ID, errExec)
 			scope.lastErr = errExec
 			continue
 		}
@@ -206,6 +230,9 @@ func (s executionService) executeStreamMixedOnce(ctx context.Context, providers 
 	}
 
 	for {
+		if state := bufferRecoveryFrom(ctx); !state.available(ctx) {
+			return nil, state.failure(ctx)
+		}
 		if budget := RecoveryBudgetFromContext(ctx); budget != nil && !budget.available(ctx, 0) {
 			return nil, budget.exhaustedError(ctx)
 		}
@@ -220,6 +247,11 @@ func (s executionService) executeStreamMixedOnce(ctx context.Context, providers 
 				return nil, errBudget
 			}
 		}
+		if err := bufferRecoveryFrom(ctx).consume(ctx, candidate.auth.ID); err != nil {
+			releaseSlot()
+			return nil, err
+		}
+		requestusage.ObserveRequestPhase(ctx, "upstream")
 		startedAt := time.Now()
 		streamResult, errStream := candidate.executor.ExecuteStream(candidate.execCtx, candidate.auth, candidate.execReq, scope.opts)
 		if errStream != nil {
@@ -227,6 +259,7 @@ func (s executionService) executeStreamMixedOnce(ctx context.Context, providers 
 			if errCtx := candidate.execCtx.Err(); errCtx != nil {
 				return nil, errCtx
 			}
+			bufferRecoveryFrom(ctx).recordFailure(candidate.auth.ID, errStream)
 			rerr := errorFromExecution(errStream)
 			RecoveryBudgetFromContext(ctx).recordFailure(errStream)
 			result := Result{
@@ -336,11 +369,14 @@ func (s executionService) waitForSaturatedSlot(ctx context.Context, scope *mixed
 		auths = append(auths, candidate.auth)
 	}
 	budget := RecoveryBudgetFromContext(ctx)
-	waitCtx, cancelWait := budget.waitingContext(ctx)
+	requestusage.ObserveRequestPhase(ctx, "account_queue")
+	bufferCtx, cancelBufferWait := bufferRecoveryFrom(ctx).waitingContext(ctx)
+	defer cancelBufferWait()
+	waitCtx, cancelWait := budget.waitingContext(bufferCtx)
 	defer cancelWait()
 	releaseSlot, authID, err := s.manager.waitAccountSlot(waitCtx, auths)
 	if err != nil {
-		return nil, nil, budget.waitingError(ctx, err)
+		return nil, nil, bufferRecoveryFrom(ctx).waitingError(ctx, budget.waitingError(ctx, err))
 	}
 	for i, candidate := range scope.saturated {
 		if candidate.auth.ID != authID {
@@ -362,6 +398,8 @@ func (s executionService) nextMixedCandidate(ctx context.Context, scope *mixedEx
 	var executor ProviderExecutor
 	var provider string
 	var errPick error
+	requestusage.ObserveRequestPhase(ctx, "account_selection")
+	bufferRecoveryFrom(ctx).exclude(scope.tried)
 	// Prefer credentials this request has not used yet, while retaining the
 	// original selector and its security/capability filters for both selections.
 	if budget := RecoveryBudgetFromContext(ctx); budget != nil {
@@ -442,6 +480,7 @@ func (s executionService) wrapStreamResult(
 			}
 			if chunk.Err != nil && !failed {
 				failed = true
+				bufferRecoveryFrom(streamCtx).recordFailure(streamAuth.ID, chunk.Err)
 				RecoveryBudgetFromContext(streamCtx).recordFailure(chunk.Err)
 				rerr := errorFromExecution(chunk.Err)
 				chunkHeaders := headersFromError(chunk.Err)

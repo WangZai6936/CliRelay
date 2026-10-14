@@ -2,6 +2,7 @@ package usage
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 )
@@ -20,6 +21,7 @@ const (
 // RequestOutcome is emitted by the incoming request lifecycle, independently
 // of provider billing records. Missing lifecycle evidence remains unknown.
 type RequestOutcome struct {
+	RequestFailure
 	RequestID      string    `json:"request_id"`
 	StartedAt      time.Time `json:"started_at"`
 	CompletedAt    time.Time `json:"completed_at"`
@@ -40,6 +42,7 @@ type requestTracker struct {
 	attempts       int64
 	failedAttempts int64
 	identity       Record
+	failure        RequestFailure
 }
 
 // BeginRequest gives one logical HTTP request (or one WebSocket generation)
@@ -235,6 +238,22 @@ func FinishRequest(ctx context.Context) {
 	record.RequestCorrelationID = t.id
 	record.RequestOutcome = &RequestOutcome{RequestID: t.id, StartedAt: t.started, CompletedAt: time.Now(),
 		Result: result, FailureStage: stage, Attempts: t.attempts, FailedAttempts: t.failedAttempts}
+	failure := t.failure
+	if result == OutcomeSucceeded || result == OutcomeRecovered || result == OutcomeUnknown {
+		failure = RequestFailure{ResponseStatus: failure.ResponseStatus}
+	} else if result == OutcomeClientCanceled {
+		cause := classifyRequestError(499, context.Canceled)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			cause = classifyRequestError(499, context.DeadlineExceeded)
+		}
+		cause.ResponseStatus, cause.ErrorPhase = failure.ResponseStatus, failure.ErrorPhase
+		failure = cause
+	} else if result == OutcomeClientDeliveryFailed {
+		failure.ErrorCode, failure.ErrorReason = "client_delivery_failed", "downstream_write_failed"
+	} else if failure.ErrorCode == "" {
+		failure.ErrorCode, failure.ErrorReason = "unknown_error", "unclassified_failure"
+	}
+	record.RequestOutcome.RequestFailure = failure
 	t.mu.Unlock()
 	PublishRecord(context.Background(), record)
 }

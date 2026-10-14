@@ -35,3 +35,16 @@ CREATE TABLE IF NOT EXISTS request_outcomes (
 );
 CREATE INDEX IF NOT EXISTS idx_request_outcomes_tenant_time ON request_outcomes(tenant_id, timestamp);
 `
+
+// A separate version upgrades databases that already applied requestOutcomeSQL.
+// Defaults leave historical causes unknown; no body backfill or table rewrite.
+const requestFailureSQL = `
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '60s';
+ALTER TABLE request_outcomes ADD COLUMN IF NOT EXISTS response_status INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE request_outcomes ADD COLUMN IF NOT EXISTS error_status INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE request_outcomes ADD COLUMN IF NOT EXISTS error_code TEXT NOT NULL DEFAULT '';
+ALTER TABLE request_outcomes ADD COLUMN IF NOT EXISTS error_type TEXT NOT NULL DEFAULT '';
+ALTER TABLE request_outcomes ADD COLUMN IF NOT EXISTS error_reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE request_outcomes ADD COLUMN IF NOT EXISTS error_phase TEXT NOT NULL DEFAULT '';
+`

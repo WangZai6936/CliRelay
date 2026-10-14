@@ -6,10 +6,10 @@ package usage
 // the whole correlated chain in the selected tenant/time range.
 const requestOutcomeReadModelSQL = `(
  SELECT tenant_id, request_id, timestamp, completed_at, api_key, api_key_id, api_key_name, model,
- auth_index, auth_subject_id, channel_name, result, failure_stage, attempts, failed_attempts FROM request_outcomes
+ auth_index, auth_subject_id, channel_name, result, failure_stage, attempts, failed_attempts, response_status, error_status, error_code, error_type, error_reason, error_phase FROM request_outcomes
  UNION ALL
  SELECT tenant_id, request_id, first_at AS timestamp, NULL AS completed_at, api_key, api_key_id, api_key_name, model,
- auth_index, auth_subject_id, channel_name, 'unknown' AS result, '' AS failure_stage, chain_attempts AS attempts, chain_failed AS failed_attempts
+ auth_index, auth_subject_id, channel_name, 'unknown' AS result, '' AS failure_stage, chain_attempts AS attempts, chain_failed AS failed_attempts, 0 AS response_status, 0 AS error_status, '' AS error_code, '' AS error_type, '' AS error_reason, '' AS error_phase
  FROM (
   SELECT logs.*,
    MIN(timestamp) OVER (PARTITION BY tenant_id, request_id) AS first_at,
