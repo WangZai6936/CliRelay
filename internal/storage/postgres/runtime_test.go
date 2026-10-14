@@ -11,11 +11,14 @@ import (
 
 func TestRuntimeMigrationsCoverCoreTables(t *testing.T) {
 	migrations := RuntimeMigrations()
-	if len(migrations) != 40 {
-		t.Fatalf("RuntimeMigrations len = %d, want 40", len(migrations))
+	if len(migrations) != 41 {
+		t.Fatalf("RuntimeMigrations len = %d, want 41", len(migrations))
 	}
 	if migrations[39].Version != "202610130001_request_outcomes" || !strings.Contains(migrations[39].SQL, "CREATE TABLE IF NOT EXISTS request_outcomes") {
 		t.Fatal("missing request outcome migration")
+	}
+	if migrations[40].Version != "202610140001_request_failure_diagnostics" {
+		t.Fatal("missing separately versioned terminal diagnostics upgrade")
 	}
 	// Membership table of multi-instance deployments.
 	if migrations[31].Version != "202609250001_cluster_nodes" {

@@ -313,6 +313,9 @@ func TestMetadataCleanupWaitsForRollupBackfillMarker(t *testing.T) {
 	}, time.UTC); err != nil {
 		t.Fatalf("InitDB: %v", err)
 	}
+	// This test drives cleanup itself; the background worker must not consume
+	// the fixture row between setting the marker and asserting the deletion.
+	stopRequestLogMaintenance()
 	t.Cleanup(func() {
 		stopRequestLogMaintenance()
 		CloseDB()
