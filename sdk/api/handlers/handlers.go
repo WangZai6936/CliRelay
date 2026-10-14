@@ -523,6 +523,7 @@ func (h *BaseAPIHandler) GetContextWithCancel(handler interfaces.APIHandler, c *
 	parentCtx = requestusage.WithRequestTracker(parentCtx, requestCtx)
 	parentCtx = inheritRequestDiagnostics(parentCtx, requestCtx, c, logging.GetRequestID(parentCtx))
 	newCtx, cancel := context.WithCancel(parentCtx)
+	newCtx = context.WithValue(newCtx, util.ContextKeyGin, c)
 	if requestCtx != nil && requestCtx != parentCtx {
 		go func() {
 			select {
@@ -532,7 +533,6 @@ func (h *BaseAPIHandler) GetContextWithCancel(handler interfaces.APIHandler, c *
 			}
 		}()
 	}
-	newCtx = context.WithValue(newCtx, util.ContextKeyGin, c)
 	observeRequestDelivery(c, newCtx)
 	return newCtx, h.requestDeliveryCancel(c, newCtx, cancel)
 }
