@@ -617,14 +617,47 @@ func TestAPICallReconcilesCodexWhamUsagePlanType(t *testing.T) {
 	}
 }
 
-func TestAPICallRejectsLoopbackTarget(t *testing.T) {
+// Note: private/loopback intranet targets are allowed for management fetch
+// (panel「获取 /models」via Docker DNS). Link-local / metadata stay blocked.
+func TestAPICallAllowsLoopbackIntranetTarget(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"model-a"}]}`))
+	}))
+	t.Cleanup(upstream.Close)
+
+	h := &Handler{cfg: &config.Config{}}
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	body := []byte(`{"method":"GET","url":"` + upstream.URL + `/v1/models"}`)
+	req := httptest.NewRequest(http.MethodPost, "/v0/management/api-call", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	c.Request = req
+
+	h.APITools().APICall(c)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "blocked url") {
+		t.Fatalf("intranet loopback should be allowed for management fetch, body=%s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "model-a") {
+		t.Fatalf("expected upstream models body, got body=%s", rec.Body.String())
+	}
+}
+
+func TestAPICallRejectsLinkLocalMetadataTarget(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	h := &Handler{cfg: &config.Config{}}
 
 	rec := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(rec)
-	body := []byte(`{"method":"GET","url":"http://127.0.0.1:1/metadata"}`)
+	body := []byte(`{"method":"GET","url":"http://169.254.169.254/latest/meta-data/"}`)
 	req := httptest.NewRequest(http.MethodPost, "/v0/management/api-call", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	c.Request = req
@@ -639,11 +672,11 @@ func TestAPICallRejectsLoopbackTarget(t *testing.T) {
 	}
 }
 
-func TestAPICallRejectsRedirectToLoopbackTarget(t *testing.T) {
+func TestAPICallRejectsRedirectToLinkLocalMetadata(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "http://127.0.0.1:1/metadata", http.StatusFound)
+		http.Redirect(w, r, "http://169.254.169.254/latest/meta-data/", http.StatusFound)
 	}))
 	t.Cleanup(proxy.Close)
 
