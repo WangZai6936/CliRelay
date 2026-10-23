@@ -42,7 +42,7 @@ func (h *Handler) throttlePolicySnapshot() []gin.H {
 	snapshot := h.loginThrottle.policySnapshot()
 	scopes := []throttleScope{
 		scopeUnauthenticated, scopeManagementKey, scopeUserPassword,
-		scopeUserAccount, scopeRefresh, scopePortalPassword, scopePortalAccount,
+		scopeUserAccount, scopeRefresh, scopePortalPassword, scopePortalAccount, scopePortalRegistration,
 	}
 	rendered := make([]gin.H, 0, len(scopes))
 	for _, scope := range scopes {

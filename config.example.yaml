@@ -96,6 +96,17 @@ cors-allow-origins: []
 #   - "172.18.0.0/16"
 trusted-proxies: []
 
+# Public portal signup. Enable explicitly, then share http://your-host:8317/register.
+# Public users cannot enter the management console. Passwords follow the existing
+# 12-72 byte policy (uppercase, lowercase and a non-alphanumeric character).
+portal-registration:
+  enabled: false
+  # Empty uses the system tenant; this value cannot be chosen by the registrant.
+  tenant-id: ""
+  # Recommended: select an existing profile in that tenant to bound quotas/models.
+  # Empty follows existing portal account defaults (unrestricted, zero = unlimited).
+  permission-profile-id: ""
+
 # Management API settings
 remote-management:
   # Whether to allow remote (non-localhost) management access.

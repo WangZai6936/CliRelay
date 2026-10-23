@@ -339,6 +339,8 @@ requires_openai_auth = true
 
 ## 🖥️ Management Panel
 
+Public portal account signup is available at `/register` when `portal-registration.enabled` is enabled. See [public registration setup](docs/portal-registration.md) for tenant, permission profile and API details.
+
 When the control panel is enabled, open:
 
 ```bash

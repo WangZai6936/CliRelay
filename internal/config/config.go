@@ -66,6 +66,9 @@ type Config struct {
 	// RemoteManagement nests management-related options under 'remote-management'.
 	RemoteManagement RemoteManagement `yaml:"remote-management" json:"-"`
 
+	// PortalRegistration controls public self-service portal account creation.
+	PortalRegistration PortalRegistrationConfig `yaml:"portal-registration,omitempty" json:"portal-registration,omitempty"`
+
 	// AutoUpdate controls Docker-first update checks and updater sidecar integration.
 	AutoUpdate AutoUpdateConfig `yaml:"auto-update" json:"auto-update"`
 

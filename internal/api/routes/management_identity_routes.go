@@ -22,6 +22,12 @@ func registerIdentityAuthRoutes(engine *gin.Engine, h *managementhandlers.Handle
 
 	portal := engine.Group("/v0/portal")
 	portal.Use(middlewares...)
+	portal.GET("/auth/registration", h.GetPortalRegistration)
+	portal.POST("/auth/register", bodyutil.LimitBodyMiddleware(4096), h.PostPortalRegister)
+	// Shareable public signup entry, served from source embedded in the backend.
+	registration := engine.Group("/register")
+	registration.Use(middlewares...)
+	registration.GET("", h.GetPortalRegistrationPage)
 	// Login and refresh throttle themselves inside the handler, mirroring the
 	// admin /v0/auth routes. A middleware cannot do it correctly here: it only
 	// sees the response status, and "401" conflates a wrong password with an

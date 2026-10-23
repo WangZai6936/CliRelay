@@ -24,6 +24,7 @@ const (
 	scopeRefresh
 	scopePortalPassword
 	scopePortalAccount
+	scopePortalRegistration
 )
 
 func (s throttleScope) String() string {
@@ -42,6 +43,8 @@ func (s throttleScope) String() string {
 		return "portal_password"
 	case scopePortalAccount:
 		return "portal_account"
+	case scopePortalRegistration:
+		return "portal_registration"
 	default:
 		return "unknown"
 	}
