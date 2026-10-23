@@ -37,6 +37,7 @@ const (
 	RuntimeSettingErrorLogsMaxFiles  = "error-logs-max-files"
 	RuntimeSettingRequestLogStorage  = "request-log-storage"
 	RuntimeSettingProxyURL           = "proxy-url"
+	RuntimeSettingPortalShowcase     = "portal-model-showcase"
 )
 
 // Specs lists every runtime setting a config.Config is built from.
@@ -62,6 +63,7 @@ func Canonical(spec Spec, cfg *config.Config) ([]byte, error) {
 
 func generalSpecs() []Spec {
 	return []Spec{
+		valueSpec(RuntimeSettingPortalShowcase, func(c *config.Config) *[]config.PortalShowcaseModel { return &c.PortalModelShowcase }, func(v []config.PortalShowcaseModel) bool { return len(v) > 0 }),
 		valueSpec(RuntimeSettingDebug, func(c *config.Config) *bool { return &c.Debug }, isTrue),
 		valueSpec(RuntimeSettingRequestRetry, func(c *config.Config) *int { return &c.RequestRetry }, isNonZero),
 		valueSpec(RuntimeSettingMaxRetryInterval, func(c *config.Config) *int { return &c.MaxRetryInterval }, isNonZero),

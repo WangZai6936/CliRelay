@@ -237,7 +237,7 @@ func permissionForManagementRequest(method, path string) string {
 	// Process-global config knobs (explicit so default stays fail-closed).
 	case relative == "/config":
 		return "tenant_settings.read"
-	case relative == "/debug", relative == "/logging-to-file", relative == "/logs-max-total-size-mb",
+	case relative == "/portal-model-showcase", relative == "/debug", relative == "/logging-to-file", relative == "/logs-max-total-size-mb",
 		relative == "/error-logs-max-files", relative == "/usage-statistics-enabled",
 		relative == "/request-log", strings.HasPrefix(relative, "/request-log-storage"),
 		relative == "/ws-auth":

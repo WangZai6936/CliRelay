@@ -342,6 +342,8 @@ requires_openai_auth = true
 
 ## 🖥️ 管理面板
 
+启用 `portal-registration.enabled` 后，可通过 `/register` 对外开放普通用户注册。租户、默认权限档案及接口说明见[公开注册配置](docs/portal-registration.md)。
+
 启用控制面板后，直接访问：
 
 ```bash

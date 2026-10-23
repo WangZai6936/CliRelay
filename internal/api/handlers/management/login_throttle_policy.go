@@ -98,6 +98,13 @@ func defaultThrottlePolicies() map[throttleScope]throttlePolicy {
 			ResetAfter: defaultFailureResetAfter,
 			HardBlock:  false,
 		},
+		scopePortalRegistration: {
+			Short:      throttleWindow{Limit: 6, Window: 15 * time.Minute},
+			Long:       throttleWindow{Limit: 21, Window: 24 * time.Hour},
+			Backoff:    []time.Duration{15 * time.Minute},
+			ResetAfter: 24 * time.Hour,
+			HardBlock:  false,
+		},
 	}
 }
 

@@ -6,6 +6,8 @@ import (
 )
 
 func registerManagementSettingsRoutes(group *gin.RouterGroup, h *managementhandlers.Handler) {
+	group.GET("/portal-model-showcase", h.GetPortalShowcase)
+	group.PUT("/portal-model-showcase", h.PutPortalShowcase)
 	group.GET("/config", h.GetConfig)
 	group.GET("/config.yaml", h.GetConfigYAML)
 	group.PUT("/config.yaml", h.PutConfigYAML)

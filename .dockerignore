@@ -37,6 +37,7 @@ bin/*
 .gemini/*
 .serena/*
 .agent/*
+.registration-preview/
 .agents/*
 .opencode/*
 .bmad/*
