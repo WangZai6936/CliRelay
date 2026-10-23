@@ -68,6 +68,8 @@ type Config struct {
 
 	// PortalRegistration controls public self-service portal account creation.
 	PortalRegistration PortalRegistrationConfig `yaml:"portal-registration,omitempty" json:"portal-registration,omitempty"`
+	// PortalModelShowcase is the ordered, public model list on the login page.
+	PortalModelShowcase []PortalShowcaseModel `yaml:"portal-model-showcase,omitempty" json:"portal-model-showcase"`
 
 	// AutoUpdate controls Docker-first update checks and updater sidecar integration.
 	AutoUpdate AutoUpdateConfig `yaml:"auto-update" json:"auto-update"`

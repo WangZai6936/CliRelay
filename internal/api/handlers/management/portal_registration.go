@@ -17,8 +17,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-//go:embed portal_registration.html
-var portalRegistrationHTML []byte
+//go:embed portal-logo.svg
+var portalLogo []byte
 
 func (h *Handler) portalRegistrationConfig() config.PortalRegistrationConfig {
 	if h == nil {
@@ -42,15 +42,28 @@ func (h *Handler) GetPortalRegistration(c *gin.Context) {
 	})
 }
 
-// GetPortalRegistrationPage serves a standalone form without depending on a
-// separately released management panel version.
+// GetPortalRegistrationPage opens the registration route in the shared panel UI.
 func (h *Handler) GetPortalRegistrationPage(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
-	c.Header("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
-	c.Header("X-Frame-Options", "DENY")
+	c.Redirect(http.StatusFound, "/manage/portal-register")
+}
+
+// GetPortalLoginPage is the public entry for ordinary portal accounts.
+func (h *Handler) GetPortalLoginPage(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	c.Redirect(http.StatusFound, "/manage/portal-login")
+}
+
+// GetPortalAuthAsset serves only the embedded public assets, never disk files.
+func (h *Handler) GetPortalAuthAsset(c *gin.Context) {
+	name := strings.TrimPrefix(c.Param("asset"), "/")
+	if name != "portal-logo.svg" {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	c.Header("Cache-Control", "no-cache")
 	c.Header("X-Content-Type-Options", "nosniff")
-	c.Header("Referrer-Policy", "no-referrer")
-	c.Data(http.StatusOK, "text/html; charset=utf-8", portalRegistrationHTML)
+	c.Data(http.StatusOK, "image/svg+xml", portalLogo)
 }
 
 // PostPortalRegister accepts only account credentials. Tenant, status, roles,

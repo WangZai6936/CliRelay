@@ -130,12 +130,33 @@ func TestPublicRegistrationThrottlesBeforeDBAndHashing(t *testing.T) {
 	}
 }
 
-func TestPublicRegistrationPageHasPrivateHeadersAndNoInjectedConfig(t *testing.T) {
+func TestPortalAuthEntryRoutesAndLogo(t *testing.T) {
 	h := &Handler{}
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	h.GetPortalRegistrationPage(c)
-	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), "id=\"registration\"") || recorder.Header().Get("Cache-Control") != "no-store" || recorder.Header().Get("X-Frame-Options") != "DENY" || !strings.Contains(recorder.Header().Get("Content-Security-Policy"), "frame-ancestors 'none'") {
-		t.Fatalf("registration page response: %d %v", recorder.Code, recorder.Header())
+	for _, page := range []struct {
+		path    string
+		handler gin.HandlerFunc
+	}{
+		{"/manage/portal-login", h.GetPortalLoginPage}, {"/manage/portal-register", h.GetPortalRegistrationPage},
+	} {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/login", nil)
+		page.handler(c)
+		if w.Code != http.StatusFound || w.Header().Get("Location") != page.path || w.Header().Get("Cache-Control") != "no-store" {
+			t.Fatalf("account entry: %d %v", w.Code, w.Header())
+		}
+	}
+	for _, name := range []string{"portal-logo.svg", "portal_auth.js", "../portal_registration.go"} {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "asset", Value: "/" + name}}
+		h.GetPortalAuthAsset(c)
+		if name == "portal-logo.svg" {
+			if w.Code != http.StatusOK || w.Body.Len() == 0 || w.Header().Get("Content-Type") != "image/svg+xml" {
+				t.Fatalf("logo: %d", w.Code)
+			}
+		} else if w.Code != http.StatusNotFound {
+			t.Fatalf("unexpected file exposed: %s", name)
+		}
 	}
 }

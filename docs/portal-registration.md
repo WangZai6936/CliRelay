@@ -19,11 +19,25 @@ portal-registration:
 
 使用项目现有的配置重载机制应用修改，或执行 `docker compose restart cli-proxy-api`。管理认证服务需要已启用并完成数据库初始化。
 
-将 `https://你的域名/register` 分享给用户。该页面随后端编译，支持中文、英文、俄文与手机屏幕，不依赖单独升级 `codeProxy` 管理面板。门户登录地址是 `/manage/#/apikey-lookup`。
+将 `https://你的域名/login` 分享给用户，作为统一的账号入口。没有账号的用户点击「立即注册」进入 `/register`；注册成功后返回登录页，并自动填入用户名。登录成功后直接进入 `/manage/apikey-lookup` 用户门户，无需重复登录。
+
+登录页和注册页使用「星桥 / StarBridge」品牌，沿用原管理面板的登录卡片、主题、输入框和模型动画；注册页也使用同一套组件。`/login` 和 `/register` 分别转到面板的 `/manage/portal-login` 和 `/manage/portal-register`。用户退出时先注销会话并清理本地状态，再返回 `/login`，不会回到旧门户落地页。密码不会写入浏览器存储或网址。新账号仍在后台「接入与凭证 → 用户账号」管理。
+
+**本版本需要同步构建面板**：Docker 构建会自动应用 `frontend-patches/0001-starbridge-portal.patch` 后构建原 `codeProxy` 源码。独立部署面板时也需要应用该补丁并重新构建，详见 `frontend-patches/README.md`。旧版上游面板不包含新增的登录注册路由，不能只替换后端二进制。
 
 默认不开启公开注册，已有部署升级后保持原行为。将 `enabled` 改回 `false` 即可关闭新注册；已注册账号仍可登录。
 
 ## 注册行为
+
+### 登录页模型展示
+
+登录页的「看看支持哪些模型」按钮会打开品牌图标与模型名称列表。管理员可在「系统设置 → 登录页模型展示」添加或移除展示项、修改名称并调整顺序，保存后访客下一次打开弹窗即可读取新列表。列表为空时展示空状态，不会自动推断或公开实际渠道、凭证、租户和内部模型配置。
+
+后台配置通过 `GET/PUT /v0/management/portal-model-showcase` 读写，需要系统租户配置权限；配置保存在现有带版本的数据库设置中，跨节点共享，旧版本写入返回 `409`。匿名接口 `GET /v0/portal/model-showcase` 仅返回 `items: [{name, icon}]`。图标只能选择内置品牌或通用图标，不接受外部图片地址。最多 50 项，名称最多 80 字符。修改展示列表不改变账号的模型调用权限。
+
+可在初始 YAML 中设置 `portal-model-showcase`，如 `[{name: Claude, icon: claude}]`；数据库首次导入后以后台保存的配置为准。默认列表为空。
+
+### 账号规则
 
 - 用户名为 3–48 位英文字母、数字、点、下划线或短横线，以字母或数字开头。忽略首尾空白及大小写，全局唯一；重复返回 `409 username_taken`，不会自动改名。
 - 昵称选填，默认使用用户名，最多 128 字节。
@@ -65,4 +79,4 @@ go test ./internal/enduser ./internal/config ./internal/api/handlers/management 
 
 ## English
 
-Enable `portal-registration.enabled`, optionally choose an existing tenant and permission profile, then share `/register`. New users receive ordinary portal accounts and a default API key atomically; they sign in at `/manage/#/apikey-lookup`. No administration roles or tenants are created. Registration is disabled by default and uses a separate IP throttle. The public capabilities endpoint lets independently released frontends discover the feature. Leaving the profile empty uses existing portal account defaults (zero limits mean unlimited).
+Enable `portal-registration.enabled`, optionally choose an existing tenant and permission profile, then share `/login`. The StarBridge login page links to `/register` when signup is enabled. Registration returns users to login with their username prefilled; successful login opens `/manage/apikey-lookup` with the existing portal session format. New users receive ordinary portal accounts and a default API key atomically. No administration roles or tenants are created. Registration is disabled by default and uses a separate IP throttle. The public capabilities endpoint lets independently released frontends discover the feature. Leaving the profile empty uses existing portal account defaults (zero limits mean unlimited).

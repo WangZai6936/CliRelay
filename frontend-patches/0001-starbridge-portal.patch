@@ -1,0 +1,1869 @@
+diff --git a/apps/admin-panel/index.html b/apps/admin-panel/index.html
+index 7de908e..ef6a612 100644
+--- a/apps/admin-panel/index.html
++++ b/apps/admin-panel/index.html
+@@ -3,11 +3,8 @@
+   <head>
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+-    <title>CliRelay 管理后台</title>
+-    <link rel="icon" type="image/svg+xml" href="/manage/favicon.svg" />
+-    <link rel="icon" type="image/png" sizes="32x32" href="/manage/favicon-32.png" />
+-    <link rel="icon" type="image/png" sizes="192x192" href="/manage/favicon-192.png" />
+-    <link rel="apple-touch-icon" href="/manage/apple-touch-icon.png" />
++    <title>星桥 StarBridge 管理后台</title>
++    <link rel="icon" type="image/svg+xml" href="/portal-assets/portal-logo.svg" />
+     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+     <meta name="theme-color" content="#111114" media="(prefers-color-scheme: dark)" />
+     <script>
+@@ -145,7 +142,7 @@
+     <div id="app-loader" aria-label="Loading">
+       <div class="pl-loader-content">
+         <div class="pl-ring"></div>
+-        <span class="pl-text">CliRelay</span>
++        <span class="pl-text">星桥 StarBridge</span>
+       </div>
+     </div>
+     <div id="root"></div>
+diff --git a/apps/admin-panel/manage.html b/apps/admin-panel/manage.html
+index 2250902..979f0fa 100644
+--- a/apps/admin-panel/manage.html
++++ b/apps/admin-panel/manage.html
+@@ -3,20 +3,17 @@
+   <head>
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+-    <title>CliRelay · 一个入口，接入全部模型能力</title>
++    <title>星桥 StarBridge · 一个入口，接入全部模型能力</title>
+     <meta
+       name="description"
+-      content="CliRelay 是 OpenAI 兼容的统一模型网关：一个 API Key 调度 Claude、Gemini、GPT、Grok 等模型，内置用量统计、请求日志、配额限额与账号池。"
++      content="星桥 StarBridge 是 OpenAI 兼容的统一模型网关：一个 API Key 调度 Claude、Gemini、GPT、Grok 等模型，内置用量统计、请求日志、配额限额与账号池。"
+     />
+-    <link rel="icon" type="image/svg+xml" href="/manage/favicon.svg" />
+-    <link rel="icon" type="image/png" sizes="32x32" href="/manage/favicon-32.png" />
+-    <link rel="icon" type="image/png" sizes="192x192" href="/manage/favicon-192.png" />
+-    <link rel="apple-touch-icon" href="/manage/apple-touch-icon.png" />
++    <link rel="icon" type="image/svg+xml" href="/portal-assets/portal-logo.svg" />
+     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+     <meta name="theme-color" content="#111114" media="(prefers-color-scheme: dark)" />
+     <meta property="og:type" content="website" />
+-    <meta property="og:site_name" content="CliRelay" />
+-    <meta property="og:title" content="CliRelay · 一个入口，接入全部模型能力" />
++    <meta property="og:site_name" content="星桥 StarBridge" />
++    <meta property="og:title" content="星桥 StarBridge · 一个入口，接入全部模型能力" />
+     <meta
+       property="og:description"
+       content="OpenAI 兼容的统一模型网关 · 用量可观测 · 请求日志 · 配额与账号池"
+@@ -161,7 +158,7 @@
+     <div id="app-loader" aria-label="Loading">
+       <div class="pl-loader-content">
+         <div class="pl-ring"></div>
+-        <span class="pl-text">CliRelay</span>
++        <span class="pl-text">星桥 StarBridge</span>
+       </div>
+     </div>
+     <div id="root"></div>
+diff --git a/packages/assets/src/brand/LogoMark.tsx b/packages/assets/src/brand/LogoMark.tsx
+index 7b3f4f7..63e54f2 100644
+--- a/packages/assets/src/brand/LogoMark.tsx
++++ b/packages/assets/src/brand/LogoMark.tsx
+@@ -1,70 +1,20 @@
+-/**
+- * CliRelay 品牌标记：双箭头。
+- *
+- * 图形语义：命令行提示符「›」叠成两层就是「转发」——后一层半透明、前一层实心，读起来是
+- * 一次往前的接力；末端一颗绿色小点表示在线的下一跳。绿色与界面里「在线 / 成功」同一色相。
+- *
+- * 用 SVG 画而不是位图：颜色能直接跟随主题，任何尺寸都清晰。
+- *
+- * 两个变体：
+- * - `inline`（默认）：跟随主题的墨色底板——浅色界面里是近黑底板 + 白色箭头，深色界面里
+- *   反转成浅色底板 + 深色箭头，颜色取自 `--cp-ink` / `--cp-canvas`。不用强调色：强调色
+- *   （蓝）是交互状态的颜色，品牌标记染成蓝色会读成「被选中」。
+- * - `solid`：固定近黑底板 + 白色箭头，给拿不到主题变量的场合（导出图片、外部嵌入）。
+- *
+- * favicon、apple-touch-icon、og-image 由同一份图形导出（apps/admin-panel/public），
+- * 改这里的图形时要一起重新导出。
+- */
+-
+ export type LogoMarkVariant = "inline" | "solid";
+-
+-const RELAY_GREEN = "#10a37f";
+-
+ export interface LogoMarkProps {
+-  /** 标记边长（px），标记是正方形。 */
+   size?: number;
+   variant?: LogoMarkVariant;
+   className?: string;
+-  /** 传入后标记会作为有语义的图片暴露给读屏；不传则视为纯装饰。 */
+   title?: string;
+ }
+-
+-export function LogoMark({ size = 32, variant = "inline", className, title }: LogoMarkProps) {
+-  const fixed = variant === "solid";
+-  const plate = fixed ? "#0d0d0d" : "var(--cp-ink, #0d0d0d)";
+-  const glyph = fixed ? "#ffffff" : "var(--cp-canvas, #ffffff)";
+-
++/** The shared StarBridge mark keeps the existing component's sizing contract. */
++export function LogoMark({ size = 32, className, title }: LogoMarkProps) {
+   return (
+-    <svg
+-      viewBox="0 0 32 32"
++    <img
++      src="/portal-assets/portal-logo.svg"
+       width={size}
+       height={size}
+       className={className}
+-      role={title ? "img" : undefined}
++      alt={title || ""}
+       aria-hidden={title ? undefined : true}
+-      focusable="false"
+-    >
+-      {title ? <title>{title}</title> : null}
+-      <rect width="32" height="32" rx="9" fill={plate} />
+-      {/* 整组图形比几何中心偏左 1 个单位：右端的绿点让视觉重心偏右，这样看起来才居中。 */}
+-      <path
+-        d="M8.5 10.5 14 16l-5.5 5.5"
+-        fill="none"
+-        stroke={glyph}
+-        strokeOpacity="0.42"
+-        strokeWidth="2.6"
+-        strokeLinecap="round"
+-        strokeLinejoin="round"
+-      />
+-      <path
+-        d="M15 10.5 20.5 16 15 21.5"
+-        fill="none"
+-        stroke={glyph}
+-        strokeWidth="2.6"
+-        strokeLinecap="round"
+-        strokeLinejoin="round"
+-      />
+-      <circle cx="23.6" cy="16" r="1.7" fill={RELAY_GREEN} />
+-    </svg>
++    />
+   );
+ }
+diff --git a/packages/assets/src/brand/Wordmark.tsx b/packages/assets/src/brand/Wordmark.tsx
+index 60938c1..67f07bd 100644
+--- a/packages/assets/src/brand/Wordmark.tsx
++++ b/packages/assets/src/brand/Wordmark.tsx
+@@ -1,10 +1,10 @@
+ import { LogoMark, type LogoMarkVariant } from "./LogoMark";
+ 
+ /** 品牌名唯一真源。顶栏、页脚、document.title、OG meta 都从这里取，避免各处写死后漂移。 */
+-export const BRAND_NAME = "CliRelay";
+-/** 词标拆分：`Cli` 常规字重 + `Relay` 半粗，让读者第一眼落在「Relay」这个产品语义上。 */
+-export const BRAND_NAME_PREFIX = "Cli";
+-export const BRAND_NAME_SUFFIX = "Relay";
++export const BRAND_NAME = "星桥 StarBridge";
++/** Keep the existing wordmark typography with the StarBridge identity. */
++export const BRAND_NAME_PREFIX = "星桥 ";
++export const BRAND_NAME_SUFFIX = "StarBridge";
+ 
+ export interface WordmarkProps {
+   /** 标记的像素尺寸；文字大小由外部 className 控制，便于跟随各处排版比例。 */
+@@ -32,7 +32,9 @@ export function Wordmark({
+       */}
+       <span
+         aria-label={BRAND_NAME}
+-        className={["font-display font-normal tracking-tight", textClassName].filter(Boolean).join(" ")}
++        className={["font-display font-normal tracking-tight", textClassName]
++          .filter(Boolean)
++          .join(" ")}
+       >
+         {BRAND_NAME_PREFIX}
+         <span className="font-semibold">{BRAND_NAME_SUFFIX}</span>
+diff --git a/pages/api-key-lookup/ApiKeyLookupPage.tsx b/pages/api-key-lookup/ApiKeyLookupPage.tsx
+index 052eb7d..d278688 100644
+--- a/pages/api-key-lookup/ApiKeyLookupPage.tsx
++++ b/pages/api-key-lookup/ApiKeyLookupPage.tsx
+@@ -9,6 +9,7 @@ import {
+ } from "@code-proxy/api-client";
+ import type { LoginFailure } from "@features/login-lock";
+ import { describeLoginFailure } from "../login/loginErrors";
++import { portalNavigation } from "../login/portalAuth";
+ import { useTheme } from "@code-proxy/ui";
+ import { Reveal } from "@code-proxy/ui";
+ import { Modal } from "@code-proxy/ui";
+@@ -936,14 +937,9 @@ export function ApiKeyLookupPage() {
+   }, [activateOwnedKey, pwdForm.current, pwdForm.next, t]);
+ 
+   const handleLogout = useCallback(() => {
+-    void portalApi.logout();
+-    setPortalUser(null);
+-    setPortalKeys([]);
+-    setOperationalKeyId("");
+-    handleApiKeyInputChange("");
+-    setLoginModalOpen(false);
+-    setSavedPortalAccounts(portalApi.listSavedAccounts());
+-  }, [handleApiKeyInputChange]);
++    setPortalSessionPending(true);
++    void portalNavigation.signOut();
++  }, []);
+ 
+   const handleAddAccount = useCallback(() => {
+     // Keep current session/UI visible; only open login for the next account.
+diff --git a/pages/api-key-lookup/__tests__/ApiKeyLookupPage.test.tsx b/pages/api-key-lookup/__tests__/ApiKeyLookupPage.test.tsx
+index 9c7f3e7..6dc6ef7 100644
+--- a/pages/api-key-lookup/__tests__/ApiKeyLookupPage.test.tsx
++++ b/pages/api-key-lookup/__tests__/ApiKeyLookupPage.test.tsx
+@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
+ import userEvent from "@testing-library/user-event";
+ import { beforeEach, describe, expect, test, vi } from "vitest";
+ import { ApiKeyLookupPage } from "../ApiKeyLookupPage";
++import { portalNavigation } from "../../login/portalAuth";
+ import { ThemeProvider } from "@code-proxy/ui";
+ import { ToastProvider } from "@code-proxy/ui";
+ import type {
+@@ -213,7 +214,7 @@ describe("ApiKeyLookupPage", () => {
+     expect(landing).toBeInTheDocument();
+     expect(landing.closest(".bg-zinc-50")).not.toBeNull();
+     // 词标把品牌名拆成两个字重片段，因此断言整块文本而不是单个文本节点。
+-    expect(screen.getByTestId("apikey-lookup-header").textContent).toContain("CliRelay");
++    expect(screen.getByTestId("apikey-lookup-header").textContent).toContain("星桥 StarBridge");
+     expect(
+       within(landing).getByRole("heading", {
+         level: 1,
+@@ -1017,7 +1018,8 @@ describe("ApiKeyLookupPage", () => {
+     });
+   });
+ 
+-  test("logs out from the header menu and returns to the landing page", async () => {
++  test("logs out from the header menu and returns to the unified user login", async () => {
++    const openLogin = vi.spyOn(portalNavigation, "openLogin").mockImplementation(() => {});
+     window.history.replaceState({}, "", "/manage/apikey-lookup?api_key=sk-restored-key");
+ 
+     render(
+@@ -1036,8 +1038,9 @@ describe("ApiKeyLookupPage", () => {
+     );
+ 
+     expect(window.sessionStorage.getItem("apiKeyLookup.lastApiKey.v1")).toBeNull();
+-    expect(screen.getByTestId("apikey-lookup-landing")).toBeInTheDocument();
+-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
++    await waitFor(() => expect(openLogin).toHaveBeenCalledOnce());
++    expect(screen.queryByTestId("apikey-lookup-landing")).not.toBeInTheDocument();
++    openLogin.mockRestore();
+   });
+ 
+   test("shows cached usage data while refreshing chart data", async () => {
+diff --git a/pages/config/ConfigPage.tsx b/pages/config/ConfigPage.tsx
+index b8417ca..5018f6e 100644
+--- a/pages/config/ConfigPage.tsx
++++ b/pages/config/ConfigPage.tsx
+@@ -30,8 +30,11 @@ import { useToast } from "@code-proxy/ui";
+ import { useTranslation } from "react-i18next";
+ import { HoverTooltip } from "@code-proxy/ui";
+ import { YamlCodeEditor } from "./YamlCodeEditor";
++import { PortalShowcaseSettings } from "./PortalShowcaseSettings";
++import { useOptionalAuth } from "@app/providers/AuthProvider";
++import { showcaseCopy } from "../login/modelShowcase";
+ 
+-type ConfigTab = "visual" | "source";
++type ConfigTab = "visual" | "source" | "portal-models";
+ 
+ const TAB_STORAGE_KEY = "config-panel:tab";
+ 
+@@ -149,7 +152,7 @@ function useStickyTab(): [ConfigTab, (next: ConfigTab) => void] {
+   const [tab, setTab] = useState<ConfigTab>(() => {
+     try {
+       const saved = localStorage.getItem(TAB_STORAGE_KEY);
+-      if (saved === "visual" || saved === "source") return saved;
++      if (saved === "visual" || saved === "source" || saved === "portal-models") return saved;
+       return "visual";
+     } catch {
+       return "visual";
+@@ -169,9 +172,14 @@ function useStickyTab(): [ConfigTab, (next: ConfigTab) => void] {
+ }
+ 
+ export function ConfigPage() {
+-  const { t } = useTranslation();
++  const { t, i18n } = useTranslation();
++  const canReadShowcase = useOptionalAuth()?.can("system.config.read") ?? false;
++  const showcaseText = showcaseCopy(i18n?.language);
+   const { notify } = useToast();
+   const [tab, setTab] = useStickyTab();
++  useEffect(() => {
++    if (!canReadShowcase && tab === "portal-models") setTab("visual");
++  }, [canReadShowcase, tab, setTab]);
+ 
+   const {
+     visualValues,
+@@ -522,6 +530,9 @@ export function ConfigPage() {
+         <Code2 size={14} />
+         {t("config_page.source_editor")}
+       </TabsTrigger>
++      {canReadShowcase ? (
++        <TabsTrigger value="portal-models">{showcaseText.settings}</TabsTrigger>
++      ) : null}
+     </TabsList>
+   );
+   // 后端从 CliRelay 68ed2258 起把这些设置存进数据库，GET /config 随之带上各设置的版本号；
+@@ -547,6 +558,11 @@ export function ConfigPage() {
+           {visualLayoutEnabled ? null : <div className="flex">{modeSwitch}</div>}
+ 
+           <div className={visualLayoutEnabled ? "min-h-0 flex-1" : "mt-4"}>
++            {canReadShowcase ? (
++              <TabsContent value="portal-models">
++                <PortalShowcaseSettings />
++              </TabsContent>
++            ) : null}
+             <TabsContent value="visual" className="h-full">
+               <div className="relative flex h-full min-h-0 flex-col gap-4" aria-busy={loading}>
+                 {error ? (
+@@ -729,12 +745,9 @@ export function ConfigPage() {
+         cancelText={t("ui.cancel_default")}
+         variant={
+           pendingSaveWarnings.some((key) =>
+-            [
+-              "body_storage_disable",
+-              "ws_auth_disable",
+-              "remote_management",
+-              "listener",
+-            ].includes(key),
++            ["body_storage_disable", "ws_auth_disable", "remote_management", "listener"].includes(
++              key,
++            ),
+           )
+             ? "danger"
+             : "warning"
+diff --git a/pages/config/PortalShowcaseSettings.tsx b/pages/config/PortalShowcaseSettings.tsx
+new file mode 100644
+index 0000000..c5c6d14
+--- /dev/null
++++ b/pages/config/PortalShowcaseSettings.tsx
+@@ -0,0 +1,234 @@
++import { useEffect, useState } from "react";
++import { useTranslation } from "react-i18next";
++import { ArrowDown, ArrowUp, Box, Plus, Trash2 } from "lucide-react";
++import { VendorIcon } from "@code-proxy/assets";
++import { useOptionalAuth } from "@app/providers/AuthProvider";
++import { Button, Callout, TextInput, surface, useToast } from "@code-proxy/ui";
++import { showcaseCopy, showcaseSettingsApi, type ShowcaseModel } from "../login/modelShowcase";
++
++const iconNames: Record<string, string> = {
++  claude: "Claude",
++  gemini: "Gemini",
++  gpt: "GPT",
++  grok: "Grok",
++  qwen: "Qwen",
++  deepseek: "DeepSeek",
++  codex: "Codex",
++  kimi: "Kimi",
++  glm: "GLM",
++  minimax: "MiniMax",
++  hunyuan: "Hunyuan",
++  mimo: "MiMo",
++  ollama: "Ollama",
++  vertex: "Vertex",
++  custom: "Custom",
++};
++export function PortalShowcaseSettings() {
++  const { i18n } = useTranslation();
++  const text = showcaseCopy(i18n.language);
++  const auth = useOptionalAuth();
++  const canRead = auth?.can("system.config.read") ?? false;
++  const canWrite = auth?.can("system.config.write") ?? false;
++  const { notify } = useToast();
++  const [items, setItems] = useState<ShowcaseModel[]>([]);
++  const [icons, setIcons] = useState<string[]>([]);
++  const [baseline, setBaseline] = useState("[]");
++  const [version, setVersion] = useState(0);
++  const [loading, setLoading] = useState(true);
++  const [saving, setSaving] = useState(false);
++  const [error, setError] = useState("");
++  const [retry, setRetry] = useState(0);
++  useEffect(() => {
++    if (!canRead) return;
++    let active = true;
++    setLoading(true);
++    setError("");
++    void showcaseSettingsApi
++      .get()
++      .then((data) => {
++        if (!active) return;
++        setItems(data.items);
++        setBaseline(JSON.stringify(data.items));
++        setIcons(data.available_icons);
++        setVersion(data.version);
++      })
++      .catch(() => {
++        if (active) setError(text.error);
++      })
++      .finally(() => {
++        if (active) setLoading(false);
++      });
++    return () => {
++      active = false;
++    };
++  }, [canRead, retry, text.error]);
++  const disabled = loading || saving || !canWrite;
++  function edit(index: number, value: Partial<ShowcaseModel>) {
++    setItems((current) => current.map((item, at) => (at === index ? { ...item, ...value } : item)));
++  }
++  function move(index: number, delta: number) {
++    setItems((current) => {
++      const next = [...current];
++      [next[index], next[index + delta]] = [next[index + delta], next[index]];
++      return next;
++    });
++  }
++  async function save() {
++    const normalized = items.map((item) => ({ name: item.name.trim(), icon: item.icon }));
++    if (
++      normalized.length > 50 ||
++      normalized.some(
++        (item) => !item.name || [...item.name].length > 80 || /[\r\n\t]/.test(item.name),
++      ) ||
++      new Set(normalized.map((item) => item.name.toLowerCase())).size !== normalized.length
++    ) {
++      setError(text.invalid);
++      return;
++    }
++    setSaving(true);
++    setError("");
++    try {
++      await showcaseSettingsApi.save(normalized, version);
++      const latest = await showcaseSettingsApi.get();
++      setItems(latest.items);
++      setBaseline(JSON.stringify(latest.items));
++      setVersion(latest.version);
++      notify({ type: "success", message: text.saved });
++    } catch (cause) {
++      setError(cause instanceof Error ? cause.message : text.error);
++    } finally {
++      setSaving(false);
++    }
++  }
++  if (!canRead) return null;
++  return (
++    <section
++      className={`space-y-5 p-5 sm:p-6 ${surface({ radius: "2xl" })}`}
++      aria-busy={loading || saving}
++    >
++      <div>
++        <h2 className="text-lg font-semibold text-ink">{text.settings}</h2>
++        <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-3">{text.settingsHint}</p>
++      </div>
++      {error ? (
++        <Callout tone="danger" role="alert">
++          {error}
++        </Callout>
++      ) : null}
++      {loading ? (
++        <p role="status" className="py-8 text-sm text-ink-3">
++          {text.loading}
++        </p>
++      ) : (
++        <>
++          <ol className="space-y-3">
++            {items.map((item, index) => (
++              <li
++                key={index}
++                className="grid grid-cols-[28px_minmax(0,1fr)] items-start gap-3 rounded-2xl bg-subtle p-4 sm:grid-cols-[28px_minmax(110px,150px)_minmax(100px,1fr)_auto]"
++              >
++                <span className="flex h-10 items-center justify-center">
++                  {item.icon === "custom" ? (
++                    <Box size={24} />
++                  ) : (
++                    <VendorIcon modelId={item.icon} size={25} />
++                  )}
++                </span>
++                <label className="min-w-0">
++                  <span className="sr-only">
++                    {text.icon} {index + 1}
++                  </span>
++                  <select
++                    aria-label={`${text.icon} ${index + 1}`}
++                    disabled={disabled}
++                    value={item.icon}
++                    onChange={(event) => edit(index, { icon: event.target.value })}
++                    className="h-10 w-full rounded-xl border border-edge bg-surface px-3 text-sm text-ink"
++                  >
++                    {icons.map((icon) => (
++                      <option value={icon} key={icon}>
++                        {iconNames[icon] || icon}
++                      </option>
++                    ))}
++                  </select>
++                </label>
++                <TextInput
++                  aria-label={`${text.name} ${index + 1}`}
++                  value={item.name}
++                  maxLength={80}
++                  disabled={disabled}
++                  onChange={(event) => edit(index, { name: event.target.value })}
++                  className="col-start-2 sm:col-start-auto"
++                />
++                <div className="col-start-2 flex gap-1 sm:col-start-auto">
++                  <button
++                    type="button"
++                    title={text.up}
++                    aria-label={`${text.up} ${index + 1}`}
++                    disabled={disabled || index === 0}
++                    onClick={() => move(index, -1)}
++                    className="rounded-full p-2 text-ink-3 hover:bg-hover disabled:opacity-30"
++                  >
++                    <ArrowUp size={17} />
++                  </button>
++                  <button
++                    type="button"
++                    title={text.down}
++                    aria-label={`${text.down} ${index + 1}`}
++                    disabled={disabled || index === items.length - 1}
++                    onClick={() => move(index, 1)}
++                    className="rounded-full p-2 text-ink-3 hover:bg-hover disabled:opacity-30"
++                  >
++                    <ArrowDown size={17} />
++                  </button>
++                  <button
++                    type="button"
++                    title={text.remove}
++                    aria-label={`${text.remove} ${index + 1}`}
++                    disabled={disabled}
++                    onClick={() => setItems((current) => current.filter((_, at) => at !== index))}
++                    className="rounded-full p-2 text-ink-3 hover:bg-hover disabled:opacity-30"
++                  >
++                    <Trash2 size={17} />
++                  </button>
++                </div>
++              </li>
++            ))}
++          </ol>
++          {!items.length ? (
++            <p className="rounded-2xl bg-subtle px-4 py-6 text-sm text-ink-3">{text.empty}</p>
++          ) : null}
++          <div className="flex flex-wrap items-center justify-between gap-3">
++            <div className="flex gap-3">
++              <Button
++                variant="secondary"
++                disabled={disabled || items.length >= 50}
++                onClick={() =>
++                  setItems((current) => [...current, { name: "", icon: icons[0] || "custom" }])
++                }
++              >
++                <Plus size={16} />
++                {text.add}
++              </Button>
++              <Button
++                variant="secondary"
++                disabled={loading || saving}
++                onClick={() => setRetry((value) => value + 1)}
++              >
++                {text.refresh}
++              </Button>
++            </div>
++            <Button
++              variant="primary"
++              loading={saving}
++              disabled={disabled || JSON.stringify(items) === baseline}
++              onClick={() => void save()}
++            >
++              {text.save}
++            </Button>
++          </div>
++        </>
++      )}
++    </section>
++  );
++}
+diff --git a/pages/login/LoginPage.tsx b/pages/login/LoginPage.tsx
+index 2fe8707..4559080 100644
+--- a/pages/login/LoginPage.tsx
++++ b/pages/login/LoginPage.tsx
+@@ -1,9 +1,17 @@
+-import { useCallback, useMemo, useRef, useState, type FormEvent } from "react";
++import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+ import { useTranslation } from "react-i18next";
+-import { Navigate, useLocation, useNavigate } from "react-router-dom";
++import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
+ import { AnimatePresence, motion } from "framer-motion";
+-import { ArrowBigUpDash, ArrowRight, ChevronDown, Eye, EyeOff, KeyRound, UserRound } from "lucide-react";
+-import { detectApiBaseFromLocation } from "@code-proxy/api-client";
++import {
++  ArrowBigUpDash,
++  ArrowRight,
++  ChevronDown,
++  Eye,
++  EyeOff,
++  KeyRound,
++  UserRound,
++} from "lucide-react";
++import { detectApiBaseFromLocation, portalApi } from "@code-proxy/api-client";
+ import { useAuth } from "@app/providers/AuthProvider";
+ import {
+   Button,
+@@ -27,6 +35,8 @@ import {
+ import { LoginNetwork } from "./LoginNetwork";
+ import { RotatingModelName } from "./RotatingModelName";
+ import { describeLoginFailure } from "./loginErrors";
++import { portalCopy, registrationCapabilities, portalNavigation } from "./portalAuth";
++import { SupportedModelsButton } from "./SupportedModelsButton";
+ 
+ interface RedirectState {
+   from?: { pathname?: string };
+@@ -45,7 +55,49 @@ const HINT_MOTION = {
+ } as const;
+ 
+ export function LoginPage() {
+-  const { t } = useTranslation();
++  return <AccountLoginForm auth={useAuth()} />;
++}
++
++interface LoginFormAuth {
++  state: {
++    isAuthenticated: boolean;
++    isRestoring: boolean;
++    apiBase: string;
++    rememberPassword: boolean;
++    principal: { user: { must_change_password: boolean } } | null;
++    authFailureCode: string;
++  };
++  actions: {
++    login: (input: {
++      apiBase: string;
++      username: string;
++      password: string;
++      rememberPassword: boolean;
++    }) => Promise<{ user: { must_change_password: boolean } }>;
++  };
++}
++
++export function PortalLoginPage() {
++  const auth: LoginFormAuth = {
++    state: {
++      isAuthenticated: false,
++      isRestoring: false,
++      apiBase: detectApiBaseFromLocation(),
++      rememberPassword: false,
++      principal: null,
++      authFailureCode: "",
++    },
++    actions: {
++      login: ({ username, password, rememberPassword }) =>
++        portalApi.login(username, password, rememberPassword),
++    },
++  };
++  return <AccountLoginForm auth={auth} portal />;
++}
++
++function AccountLoginForm({ auth, portal = false }: { auth: LoginFormAuth; portal?: boolean }) {
++  const { t, i18n } = useTranslation();
++  const text = portalCopy(i18n?.language);
+   const navigate = useNavigate();
+   const location = useLocation();
+   const {
+@@ -58,10 +110,26 @@ export function LoginPage() {
+       authFailureCode,
+     },
+     actions: { login },
+-  } = useAuth();
++  } = auth;
+   const { notify } = useToast();
+   const [apiBase, setApiBase] = useState(persistedBase || detectApiBaseFromLocation());
+-  const [username, setUsername] = useState("");
++  const registeredUsername = portal
++    ? (location.state as { registeredUsername?: string } | null)?.registeredUsername
++    : undefined;
++  const [username, setUsername] = useState(registeredUsername || "");
++  const [signupEnabled, setSignupEnabled] = useState(false);
++  useEffect(() => {
++    if (!portal) return;
++    let active = true;
++    void registrationCapabilities()
++      .then((data) => {
++        if (active) setSignupEnabled(data.enabled);
++      })
++      .catch(() => {});
++    return () => {
++      active = false;
++    };
++  }, [portal]);
+   const [password, setPassword] = useState("");
+   const [rememberPassword, setRememberPassword] = useState(persistedRemember);
+   const [showPassword, setShowPassword] = useState(false);
+@@ -128,6 +196,10 @@ export function LoginPage() {
+         });
+         setFailure(null);
+         notify({ type: "success", message: t("login.login_success") });
++        if (portal) {
++          portalNavigation.openWorkspace();
++          return;
++        }
+         navigate(principal.user.must_change_password ? "/change-password" : redirect, {
+           replace: true,
+           viewTransition: true,
+@@ -143,7 +215,20 @@ export function LoginPage() {
+         setLoading(false);
+       }
+     },
+-    [apiBase, locked, login, navigate, notify, password, redirect, rememberPassword, shake, t, username],
++    [
++      apiBase,
++      locked,
++      login,
++      navigate,
++      notify,
++      password,
++      portal,
++      redirect,
++      rememberPassword,
++      shake,
++      t,
++      username,
++    ],
+   );
+ 
+   if (isRestoring) return null;
+@@ -177,125 +262,127 @@ export function LoginPage() {
+           <h1 className="mt-7 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+             {t("login.hero_prefix")} <RotatingModelName />
+           </h1>
+-          <p className="mt-3 max-w-md text-sm leading-6 text-ink-3">{t("login.hero_description")}</p>
++          <p className="mt-3 max-w-md text-sm leading-6 text-ink-3">
++            {portal ? text.description : t("login.hero_description")}
++          </p>
+         </motion.div>
+         <motion.div ref={cardRef} variants={page.item} className="w-full max-w-[420px]">
+-            {/* 登录卡浮在页面上：伪元素细边 + 抬起一档的投影，不画 border。 */}
+-            <motion.section
+-              animate={shakeControls}
+-              className="cp-edge rounded-3xl bg-surface p-7 shadow-lift sm:p-8"
++          {/* 登录卡浮在页面上：伪元素细边 + 抬起一档的投影，不画 border。 */}
++          <motion.section
++            animate={shakeControls}
++            className="cp-edge rounded-3xl bg-surface p-7 shadow-lift sm:p-8"
++          >
++            <div className="mb-7">
++              <h2 className="text-2xl font-semibold tracking-tight text-ink">
++                {t("login.sign_in")}
++              </h2>
++            </div>
++            <motion.form
++              className="space-y-5"
++              onSubmit={handleSubmit}
++              variants={form.container}
++              initial="hidden"
++              animate="show"
+             >
+-              <div className="mb-7">
+-                <h2 className="text-2xl font-semibold tracking-tight text-ink">{t("login.sign_in")}</h2>
+-              </div>
+-              <motion.form
+-                className="space-y-5"
+-                onSubmit={handleSubmit}
+-                variants={form.container}
+-                initial="hidden"
+-                animate="show"
+-              >
+-                {/* 会话类提示可能在表单已经入场之后才出现（比如别的标签页登出），不能挂在依次入场的
++              {registeredUsername ? <Callout tone="success">{text.registered}</Callout> : null}
++              {/* 会话类提示可能在表单已经入场之后才出现（比如别的标签页登出），不能挂在依次入场的
+                     variants 上：晚挂载的子元素会停在 hidden，只留下一块看不见的空白。 */}
+-                <AnimatePresence initial={false}>
+-                  {accessFailureMessage ? (
+-                    <motion.div {...HINT_MOTION} className="overflow-hidden">
+-                      <div className="rounded-2xl bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">
+-                        {accessFailureMessage}
+-                      </div>
+-                    </motion.div>
+-                  ) : null}
+-                </AnimatePresence>
+-                {/* 登录失败后的常驻提示：toast 几秒就消失，还剩几次、还要锁多久得一直留在表单上，
++              <AnimatePresence initial={false}>
++                {accessFailureMessage ? (
++                  <motion.div {...HINT_MOTION} className="overflow-hidden">
++                    <div className="rounded-2xl bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:bg-amber-400/15 dark:text-amber-300">
++                      {accessFailureMessage}
++                    </div>
++                  </motion.div>
++                ) : null}
++              </AnimatePresence>
++              {/* 登录失败后的常驻提示：toast 几秒就消失，还剩几次、还要锁多久得一直留在表单上，
+                     直到用户换了账号或者情况变了。toast 本身是 role="alert"，已经替读屏播报过，
+                     这里不再设播报角色，免得同一件事念两遍。 */}
+-                <AnimatePresence initial={false}>
+-                  {locked ? (
+-                    <motion.div key="login-locked" {...HINT_MOTION} className="overflow-hidden">
+-                      <Callout tone="danger">
+-                        <LoginLockMessage t={t} seconds={lockSeconds} />
+-                      </Callout>
+-                    </motion.div>
+-                  ) : remainingAttempts ? (
+-                    <motion.div key="login-remaining" {...HINT_MOTION} className="overflow-hidden">
+-                      <Callout tone="warning">
+-                        {t("login.remaining_attempts_notice", { count: remainingAttempts })}
+-                      </Callout>
+-                    </motion.div>
+-                  ) : null}
+-                </AnimatePresence>
+-                <motion.label variants={form.item} className="group block space-y-2.5">
+-                  <span className={FIELD_LABEL}>{t("login.username_label", "Username")}</span>
++              <AnimatePresence initial={false}>
++                {locked ? (
++                  <motion.div key="login-locked" {...HINT_MOTION} className="overflow-hidden">
++                    <Callout tone="danger">
++                      <LoginLockMessage t={t} seconds={lockSeconds} />
++                    </Callout>
++                  </motion.div>
++                ) : remainingAttempts ? (
++                  <motion.div key="login-remaining" {...HINT_MOTION} className="overflow-hidden">
++                    <Callout tone="warning">
++                      {t("login.remaining_attempts_notice", { count: remainingAttempts })}
++                    </Callout>
++                  </motion.div>
++                ) : null}
++              </AnimatePresence>
++              <motion.label variants={form.item} className="group block space-y-2.5">
++                <span className={FIELD_LABEL}>{t("login.username_label", "Username")}</span>
++                <TextInput
++                  ref={usernameRef}
++                  value={username}
++                  onChange={(event) => setUsername(event.target.value)}
++                  autoComplete="username"
++                  autoFocus
++                  className="rounded-full px-5"
++                  startAdornment={<UserRound size={17} className={FIELD_ICON} />}
++                />
++              </motion.label>
++              <motion.div variants={form.item}>
++                <label className="group block space-y-2.5">
++                  <span className={FIELD_LABEL}>{t("login.password_label", "Password")}</span>
+                   <TextInput
+-                    ref={usernameRef}
+-                    value={username}
+-                    onChange={(event) => setUsername(event.target.value)}
+-                    autoComplete="username"
+-                    autoFocus
++                    ref={passwordRef}
++                    value={password}
++                    onChange={(event) => setPassword(event.target.value)}
++                    onKeyDown={capsLock.onKeyDown}
++                    onKeyUp={capsLock.onKeyUp}
++                    onBlur={capsLock.onBlur}
++                    type={showPassword ? "text" : "password"}
++                    autoComplete="current-password"
+                     className="rounded-full px-5"
+-                    startAdornment={<UserRound size={17} className={FIELD_ICON} />}
+-                  />
+-                </motion.label>
+-                <motion.div variants={form.item}>
+-                  <label className="group block space-y-2.5">
+-                    <span className={FIELD_LABEL}>{t("login.password_label", "Password")}</span>
+-                    <TextInput
+-                      ref={passwordRef}
+-                      value={password}
+-                      onChange={(event) => setPassword(event.target.value)}
+-                      onKeyDown={capsLock.onKeyDown}
+-                      onKeyUp={capsLock.onKeyUp}
+-                      onBlur={capsLock.onBlur}
+-                      type={showPassword ? "text" : "password"}
+-                      autoComplete="current-password"
+-                      className="rounded-full px-5"
+-                      startAdornment={<KeyRound size={17} className={FIELD_ICON} />}
+-                      endAdornment={
+-                        <button
+-                          type="button"
+-                          onClick={() => setShowPassword((value) => !value)}
+-                          className="relative flex h-8 w-8 items-center justify-center rounded-full text-ink-3 transition-colors hover:bg-hover hover:text-ink"
+-                          aria-label={showPassword ? t("login.hide_key") : t("login.show_key")}
+-                        >
+-                          <AnimatePresence mode="wait" initial={false}>
+-                            <motion.span
+-                              key={showPassword ? "hide" : "show"}
+-                              initial={{ opacity: 0, scale: 0.7, rotate: -20 }}
+-                              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+-                              exit={{ opacity: 0, scale: 0.7, rotate: 20 }}
+-                              transition={{ duration: 0.14 }}
+-                              className="flex"
+-                            >
+-                              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+-                            </motion.span>
+-                          </AnimatePresence>
+-                        </button>
+-                      }
+-                    />
+-                  </label>
+-                  {/* 提示放在 label 外面：放进去会改变输入框的可访问名称。 */}
+-                  <AnimatePresence initial={false}>
+-                    {capsLock.capsLock ? (
+-                      <motion.p
+-                        {...HINT_MOTION}
+-                        role="status"
+-                        className="overflow-hidden"
++                    startAdornment={<KeyRound size={17} className={FIELD_ICON} />}
++                    endAdornment={
++                      <button
++                        type="button"
++                        onClick={() => setShowPassword((value) => !value)}
++                        className="relative flex h-8 w-8 items-center justify-center rounded-full text-ink-3 transition-colors hover:bg-hover hover:text-ink"
++                        aria-label={showPassword ? t("login.hide_key") : t("login.show_key")}
+                       >
+-                        <span className="flex items-center gap-1.5 pt-2 pl-1 text-xs font-medium text-warn">
+-                          <ArrowBigUpDash size={14} aria-hidden="true" />
+-                          {t("login.caps_lock_on")}
+-                        </span>
+-                      </motion.p>
+-                    ) : null}
+-                  </AnimatePresence>
+-                </motion.div>
+-                <motion.label
+-                  variants={form.item}
+-                  className="flex cursor-pointer items-center gap-2 text-sm text-ink-2"
+-                >
+-                  <Checkbox checked={rememberPassword} onCheckedChange={setRememberPassword} />
+-                  {t("login.remember_password_label")}
+-                </motion.label>
++                        <AnimatePresence mode="wait" initial={false}>
++                          <motion.span
++                            key={showPassword ? "hide" : "show"}
++                            initial={{ opacity: 0, scale: 0.7, rotate: -20 }}
++                            animate={{ opacity: 1, scale: 1, rotate: 0 }}
++                            exit={{ opacity: 0, scale: 0.7, rotate: 20 }}
++                            transition={{ duration: 0.14 }}
++                            className="flex"
++                          >
++                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
++                          </motion.span>
++                        </AnimatePresence>
++                      </button>
++                    }
++                  />
++                </label>
++                {/* 提示放在 label 外面：放进去会改变输入框的可访问名称。 */}
++                <AnimatePresence initial={false}>
++                  {capsLock.capsLock ? (
++                    <motion.p {...HINT_MOTION} role="status" className="overflow-hidden">
++                      <span className="flex items-center gap-1.5 pt-2 pl-1 text-xs font-medium text-warn">
++                        <ArrowBigUpDash size={14} aria-hidden="true" />
++                        {t("login.caps_lock_on")}
++                      </span>
++                    </motion.p>
++                  ) : null}
++                </AnimatePresence>
++              </motion.div>
++              <motion.label
++                variants={form.item}
++                className="flex cursor-pointer items-center gap-2 text-sm text-ink-2"
++              >
++                <Checkbox checked={rememberPassword} onCheckedChange={setRememberPassword} />
++                {portal ? text.remember : t("login.remember_password_label")}
++              </motion.label>
++              {!portal ? (
+                 <motion.div variants={form.item}>
+                   <button
+                     type="button"
+@@ -326,31 +413,44 @@ export function LoginPage() {
+                     ) : null}
+                   </AnimatePresence>
+                 </motion.div>
+-                <motion.div variants={form.item}>
+-                  <Button
+-                    type="submit"
+-                    variant="primary"
+-                    loading={loading}
+-                    disabled={locked}
+-                    className="group h-12 w-full"
+-                  >
+-                    {loading ? (
+-                      t("login.signing_in")
+-                    ) : (
+-                      <>
+-                        {t("login.submit_button")}
+-                        <ArrowRight
+-                          size={16}
+-                          aria-hidden="true"
+-                          className="transition-transform duration-200 ease-soft group-hover:translate-x-0.5"
+-                        />
+-                      </>
+-                    )}
+-                  </Button>
+-                </motion.div>
+-              </motion.form>
+-            </motion.section>
++              ) : null}
++              <motion.div variants={form.item}>
++                <Button
++                  type="submit"
++                  variant="primary"
++                  loading={loading}
++                  disabled={locked}
++                  className="group h-12 w-full"
++                >
++                  {loading ? (
++                    t("login.signing_in")
++                  ) : (
++                    <>
++                      {t("login.submit_button")}
++                      <ArrowRight
++                        size={16}
++                        aria-hidden="true"
++                        className="transition-transform duration-200 ease-soft group-hover:translate-x-0.5"
++                      />
++                    </>
++                  )}
++                </Button>
++              </motion.div>
++            </motion.form>
++            {portal && signupEnabled ? (
++              <p className="mt-6 text-center text-sm text-ink-3">
++                {text.noAccount}{" "}
++                <Link
++                  className="font-medium text-ink underline underline-offset-4"
++                  to="/portal-register"
++                >
++                  {text.register}
++                </Link>
++              </p>
++            ) : null}
++          </motion.section>
+         </motion.div>
++        {portal ? <SupportedModelsButton /> : null}
+       </motion.div>
+     </PageBackground>
+   );
+diff --git a/pages/login/PortalRegisterPage.tsx b/pages/login/PortalRegisterPage.tsx
+new file mode 100644
+index 0000000..e009fd5
+--- /dev/null
++++ b/pages/login/PortalRegisterPage.tsx
+@@ -0,0 +1,205 @@
++import { useEffect, useRef, useState, type FormEvent } from "react";
++import { Link, useNavigate } from "react-router-dom";
++import { useTranslation } from "react-i18next";
++import { BRAND_NAME_PREFIX, BRAND_NAME_SUFFIX, LogoMark } from "@code-proxy/assets";
++import { Button, Callout, PageBackground, TextInput, ThemeToggleButton } from "@code-proxy/ui";
++import { LoginNetwork } from "./LoginNetwork";
++import { RotatingModelName } from "./RotatingModelName";
++import { portalCopy, registrationCapabilities } from "./portalAuth";
++
++export function PortalRegisterPage() {
++  const { t, i18n } = useTranslation();
++  const text = portalCopy(i18n.language);
++  const navigate = useNavigate();
++  const cardRef = useRef<HTMLDivElement>(null);
++  const [enabled, setEnabled] = useState(false);
++  const [checking, setChecking] = useState(true);
++  const [busy, setBusy] = useState(false);
++  const [error, setError] = useState("");
++  const [username, setUsername] = useState("");
++  const [nickname, setNickname] = useState("");
++  const [password, setPassword] = useState("");
++  const [confirm, setConfirm] = useState("");
++  const [policy, setPolicy] = useState({ min: 12, max: 72 });
++  useEffect(() => {
++    let active = true;
++    void registrationCapabilities()
++      .then((data) => {
++        if (!active) return;
++        setEnabled(data.enabled);
++        setPolicy({ min: data.password_min_length, max: data.password_max_bytes });
++        if (!data.enabled) setError("closed");
++      })
++      .catch(() => {
++        if (active) setError("unavailable");
++      })
++      .finally(() => {
++        if (active) setChecking(false);
++      });
++    return () => {
++      active = false;
++    };
++  }, []);
++  async function submit(event: FormEvent<HTMLFormElement>) {
++    event.preventDefault();
++    if (busy || !enabled) return;
++    if (password !== confirm) {
++      setError("mismatch");
++      return;
++    }
++    if (new TextEncoder().encode(password).length > policy.max) {
++      setError("tooLong");
++      return;
++    }
++    setBusy(true);
++    setError("");
++    try {
++      const response = await fetch("/v0/portal/auth/register", {
++        method: "POST",
++        credentials: "omit",
++        cache: "no-store",
++        headers: { "Content-Type": "application/json" },
++        body: JSON.stringify({
++          username: username.trim(),
++          display_name: nickname.trim(),
++          password,
++        }),
++        signal: AbortSignal.timeout(20000),
++      });
++      const data = await response.json().catch(() => ({}));
++      if (!response.ok) {
++        const code = data.error?.code;
++        if (code === "registration_disabled") setEnabled(false);
++        setError(
++          response.status === 429
++            ? "throttled"
++            : code === "username_taken"
++              ? "taken"
++              : code === "registration_disabled"
++                ? "closed"
++                : response.status === 400
++                  ? "invalid"
++                  : "unavailable",
++        );
++        return;
++      }
++      setPassword("");
++      setConfirm("");
++      navigate("/portal-login", {
++        replace: true,
++        state: { registeredUsername: data.user?.username || username.trim() },
++      });
++    } catch {
++      setError("unavailable");
++    } finally {
++      setBusy(false);
++    }
++  }
++  return (
++    <PageBackground variant="login">
++      <div className="absolute right-6 top-6 z-20">
++        <ThemeToggleButton className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-surface text-ink-2 shadow-control" />
++      </div>
++      <LoginNetwork cardRef={cardRef} />
++      <div className="relative flex min-h-[100dvh] flex-col items-center justify-center px-6 py-12">
++        <div className="mb-9 flex flex-col items-center text-center">
++          <div className="flex items-center gap-2.5">
++            <LogoMark size={32} />
++            <span className="text-xl font-normal tracking-tight text-ink">
++              {BRAND_NAME_PREFIX}
++              <span className="font-semibold">{BRAND_NAME_SUFFIX}</span>
++            </span>
++          </div>
++          <h1 className="mt-7 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
++            {t("login.hero_prefix")} <RotatingModelName />
++          </h1>
++          <p className="mt-3 max-w-md text-sm leading-6 text-ink-3">{text.description}</p>
++        </div>
++        <div ref={cardRef} className="w-full max-w-[420px]">
++          <section className="cp-edge rounded-3xl bg-surface p-7 shadow-lift sm:p-8">
++            <h2 className="mb-7 text-2xl font-semibold tracking-tight text-ink">{text.title}</h2>
++            {checking ? (
++              <p role="status" className="mb-5 text-sm text-ink-3">
++                {text.checking}
++              </p>
++            ) : null}
++            {error ? (
++              <Callout tone="danger" role="alert">
++                {text[error as keyof typeof text] || text.unavailable}
++              </Callout>
++            ) : null}
++            <form onSubmit={submit} className="mt-5 space-y-5">
++              <fieldset disabled={busy || !enabled} className="min-w-0 space-y-5">
++                <label className="group block space-y-2.5">
++                  <span className="block pl-1 text-xs font-medium text-ink-3">{text.username}</span>
++                  <TextInput
++                    value={username}
++                    onChange={(e) => setUsername(e.target.value)}
++                    autoComplete="username"
++                    autoCapitalize="none"
++                    spellCheck={false}
++                    required
++                    minLength={3}
++                    maxLength={48}
++                    pattern="[A-Za-z0-9][A-Za-z0-9._\-]{2,47}"
++                    className="rounded-full px-5"
++                  />
++                  <span className="block pl-1 text-xs text-ink-3">{text.usernameHint}</span>
++                </label>
++                <details>
++                  <summary className="cursor-pointer text-xs text-ink-3">{text.nickname}</summary>
++                  <TextInput
++                    aria-label={text.nickname}
++                    value={nickname}
++                    onChange={(e) => setNickname(e.target.value)}
++                    autoComplete="nickname"
++                    maxLength={128}
++                    className="mt-3 rounded-full px-5"
++                  />
++                </details>
++                <label className="group block space-y-2.5">
++                  <span className="block pl-1 text-xs font-medium text-ink-3">{text.password}</span>
++                  <TextInput
++                    value={password}
++                    onChange={(e) => setPassword(e.target.value)}
++                    type="password"
++                    autoComplete="new-password"
++                    required
++                    minLength={policy.min}
++                    maxLength={policy.max}
++                    className="rounded-full px-5"
++                  />
++                  <span className="block pl-1 text-xs text-ink-3">{text.passwordHint}</span>
++                </label>
++                <label className="group block space-y-2.5">
++                  <span className="block pl-1 text-xs font-medium text-ink-3">{text.confirm}</span>
++                  <TextInput
++                    value={confirm}
++                    onChange={(e) => setConfirm(e.target.value)}
++                    type="password"
++                    autoComplete="new-password"
++                    required
++                    maxLength={policy.max}
++                    className="rounded-full px-5"
++                  />
++                </label>
++                <Button type="submit" variant="primary" loading={busy} className="h-12 w-full">
++                  {busy ? text.creating : text.create}
++                </Button>
++              </fieldset>
++            </form>
++            <p className="mt-6 text-center text-sm text-ink-3">
++              {text.haveAccount}{" "}
++              <Link
++                to="/portal-login"
++                className="font-medium text-ink underline underline-offset-4"
++              >
++                {text.login}
++              </Link>
++            </p>
++          </section>
++        </div>
++      </div>
++    </PageBackground>
++  );
++}
+diff --git a/pages/login/SupportedModelsButton.tsx b/pages/login/SupportedModelsButton.tsx
+new file mode 100644
+index 0000000..8ee2063
+--- /dev/null
++++ b/pages/login/SupportedModelsButton.tsx
+@@ -0,0 +1,99 @@
++import { useEffect, useState } from "react";
++import { useTranslation } from "react-i18next";
++import { Box, ArrowRight } from "lucide-react";
++import { VendorIcon } from "@code-proxy/assets";
++import { Button, Modal } from "@code-proxy/ui";
++import { fetchPublicShowcase, showcaseCopy, type ShowcaseModel } from "./modelShowcase";
++
++export function SupportedModelsButton() {
++  const { i18n } = useTranslation();
++  const text = showcaseCopy(i18n?.language);
++  const [open, setOpen] = useState(false);
++  const [items, setItems] = useState<ShowcaseModel[]>([]);
++  const [loading, setLoading] = useState(false);
++  const [error, setError] = useState(false);
++  const [attempt, setAttempt] = useState(0);
++  useEffect(() => {
++    if (!open) return;
++    const controller = new AbortController();
++    const timeout = setTimeout(() => controller.abort(), 15000);
++    let active = true;
++    setLoading(true);
++    setError(false);
++    setItems([]);
++    void fetchPublicShowcase(controller.signal)
++      .then((data) => {
++        if (active) setItems(data);
++      })
++      .catch(() => {
++        if (active) setError(true);
++      })
++      .finally(() => {
++        clearTimeout(timeout);
++        if (active) setLoading(false);
++      });
++    return () => {
++      active = false;
++      clearTimeout(timeout);
++      controller.abort();
++    };
++  }, [open, attempt]);
++  return (
++    <>
++      <button
++        type="button"
++        onClick={() => setOpen(true)}
++        className="mt-6 inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm text-ink-2 transition-colors hover:bg-hover hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4"
++      >
++        {text.button}
++        <ArrowRight size={15} aria-hidden="true" />
++      </button>
++      <Modal
++        open={open}
++        onClose={() => setOpen(false)}
++        title={text.title}
++        size="sm"
++        dirty={false}
++        initialFocus="panel"
++        footer={
++          <Button variant="secondary" onClick={() => setOpen(false)}>
++            {text.close}
++          </Button>
++        }
++      >
++        <p className="mb-4 text-xs tracking-wide text-ink-3">{text.subtitle}</p>
++        {loading ? (
++          <p role="status" className="py-8 text-center text-sm text-ink-3">
++            {text.loading}
++          </p>
++        ) : error ? (
++          <div role="alert" className="space-y-4 py-5">
++            <p className="text-sm text-ink-3">{text.error}</p>
++            <Button variant="secondary" onClick={() => setAttempt((value) => value + 1)}>
++              {text.retry}
++            </Button>
++          </div>
++        ) : items.length ? (
++          <ul className="divide-y divide-edge">
++            {items.map((item) => (
++              <li key={item.name} className="flex items-center gap-4 py-4">
++                <span className="flex h-7 w-7 shrink-0 items-center justify-center text-ink">
++                  {item.icon === "custom" ? (
++                    <Box size={25} />
++                  ) : (
++                    <VendorIcon modelId={item.icon} size={26} />
++                  )}
++                </span>
++                <span className="min-w-0 break-words text-base text-ink">{item.name}</span>
++              </li>
++            ))}
++          </ul>
++        ) : (
++          <p role="status" className="py-8 text-center text-sm text-ink-3">
++            {text.empty}
++          </p>
++        )}
++      </Modal>
++    </>
++  );
++}
+diff --git a/pages/login/__tests__/ModelShowcase.test.tsx b/pages/login/__tests__/ModelShowcase.test.tsx
+new file mode 100644
+index 0000000..cc16e80
+--- /dev/null
++++ b/pages/login/__tests__/ModelShowcase.test.tsx
+@@ -0,0 +1,114 @@
++import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
++import { beforeEach, describe, expect, test, vi } from "vitest";
++import i18n from "@code-proxy/i18n";
++import { AppearanceProvider, ThemeProvider, ToastProvider } from "@code-proxy/ui";
++import type { ReactNode } from "react";
++const mocks = vi.hoisted(() => ({
++  publicItems: vi.fn(),
++  get: vi.fn(),
++  save: vi.fn(),
++  canWrite: true,
++}));
++vi.mock("../modelShowcase", async (importOriginal) => ({
++  ...(await importOriginal<typeof import("../modelShowcase")>()),
++  fetchPublicShowcase: mocks.publicItems,
++  showcaseSettingsApi: { get: mocks.get, save: mocks.save },
++}));
++vi.mock("@app/providers/AuthProvider", () => ({
++  useOptionalAuth: () => ({
++    can: (permission: string) => permission.endsWith(".read") || mocks.canWrite,
++  }),
++}));
++import { SupportedModelsButton } from "../SupportedModelsButton";
++import { PortalShowcaseSettings } from "../../config/PortalShowcaseSettings";
++const wrap = (children: ReactNode) =>
++  render(
++    <ThemeProvider>
++      <AppearanceProvider>
++        <ToastProvider>{children}</ToastProvider>
++      </AppearanceProvider>
++    </ThemeProvider>,
++  );
++beforeEach(async () => {
++  vi.clearAllMocks();
++  mocks.canWrite = true;
++  await i18n.changeLanguage("en");
++});
++describe("public model showcase", () => {
++  test("opens only on click, renders configured order and fetches updates when reopened", async () => {
++    mocks.publicItems
++      .mockResolvedValueOnce([
++        { name: "Gemini", icon: "gemini" },
++        { name: "Claude", icon: "claude" },
++      ])
++      .mockResolvedValueOnce([{ name: "GPT", icon: "gpt" }]);
++    wrap(<SupportedModelsButton />);
++    expect(mocks.publicItems).not.toHaveBeenCalled();
++    fireEvent.click(screen.getByRole("button", { name: "See supported models" }));
++    const dialog = await screen.findByRole("dialog");
++    await within(dialog).findByText("Gemini");
++    expect(
++      within(dialog)
++        .getAllByRole("listitem")
++        .map((item) => item.textContent),
++    ).toEqual(["Gemini", "Claude"]);
++    fireEvent.click(within(dialog).getAllByRole("button", { name: /Close/i }).at(-1)!);
++    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
++    fireEvent.click(screen.getByRole("button", { name: "See supported models" }));
++    expect(await screen.findByText("GPT")).toBeInTheDocument();
++    expect(mocks.publicItems).toHaveBeenCalledTimes(2);
++  });
++  test("shows a retryable error and a proper empty state", async () => {
++    mocks.publicItems.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce([]);
++    wrap(<SupportedModelsButton />);
++    fireEvent.click(screen.getByRole("button", { name: "See supported models" }));
++    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load");
++    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
++    expect(
++      await screen.findByText("The model list has not been published yet."),
++    ).toBeInTheDocument();
++  });
++});
++describe("showcase administration", () => {
++  test("edits names, changes order and saves the versioned list", async () => {
++    const settings = {
++      items: [
++        { name: "Claude", icon: "claude" },
++        { name: "GPT", icon: "gpt" },
++      ],
++      available_icons: ["claude", "gpt"],
++      version: 3,
++    };
++    mocks.get.mockResolvedValue(settings);
++    mocks.save.mockResolvedValue({});
++    wrap(<PortalShowcaseSettings />);
++    expect(await screen.findByRole("textbox", { name: "Display name 1" })).toHaveValue("Claude");
++    fireEvent.click(screen.getByRole("button", { name: "Move down 1" }));
++    expect(screen.getByRole("textbox", { name: "Display name 1" })).toHaveValue("GPT");
++    fireEvent.change(screen.getByRole("textbox", { name: "Display name 1" }), {
++      target: { value: "GPT models" },
++    });
++    fireEvent.click(screen.getByRole("button", { name: "Save showcase" }));
++    await waitFor(() =>
++      expect(mocks.save).toHaveBeenCalledWith(
++        [
++          { name: "GPT models", icon: "gpt" },
++          { name: "Claude", icon: "claude" },
++        ],
++        3,
++      ),
++    );
++  });
++  test("read-only access disables editing and saving", async () => {
++    mocks.canWrite = false;
++    mocks.get.mockResolvedValue({
++      items: [{ name: "GPT", icon: "gpt" }],
++      available_icons: ["gpt"],
++      version: 1,
++    });
++    wrap(<PortalShowcaseSettings />);
++    expect(await screen.findByRole("textbox", { name: "Display name 1" })).toBeDisabled();
++    expect(screen.getByRole("button", { name: "Save showcase" })).toBeDisabled();
++    expect(mocks.save).not.toHaveBeenCalled();
++  });
++});
+diff --git a/pages/login/__tests__/PortalFlow.test.tsx b/pages/login/__tests__/PortalFlow.test.tsx
+new file mode 100644
+index 0000000..063b073
+--- /dev/null
++++ b/pages/login/__tests__/PortalFlow.test.tsx
+@@ -0,0 +1,121 @@
++import { fireEvent, render, screen, waitFor } from "@testing-library/react";
++import { MemoryRouter, Route, Routes } from "react-router-dom";
++import { beforeEach, describe, expect, test, vi } from "vitest";
++import { AppearanceProvider, ThemeProvider, ToastProvider } from "@code-proxy/ui";
++const api = vi.hoisted(() => ({ login: vi.fn(), logout: vi.fn(), clearSession: vi.fn() }));
++vi.mock("@code-proxy/api-client", async (importOriginal) => ({
++  ...(await importOriginal<typeof import("@code-proxy/api-client")>()),
++  portalApi: api,
++}));
++vi.mock("../LoginNetwork", () => ({ LoginNetwork: () => null }));
++vi.mock("../RotatingModelName", () => ({ RotatingModelName: () => <span>Models</span> }));
++import { PortalLoginPage } from "../LoginPage";
++import { PortalRegisterPage } from "../PortalRegisterPage";
++import { portalNavigation } from "../portalAuth";
++
++function renderFlow(path = "/portal-login") {
++  return render(
++    <MemoryRouter initialEntries={[path]}>
++      <ThemeProvider>
++        <AppearanceProvider>
++          <ToastProvider>
++            <Routes>
++              <Route path="/portal-login" element={<PortalLoginPage />} />
++              <Route path="/portal-register" element={<PortalRegisterPage />} />
++            </Routes>
++          </ToastProvider>
++        </AppearanceProvider>
++      </ThemeProvider>
++    </MemoryRouter>,
++  );
++}
++beforeEach(() => {
++  vi.restoreAllMocks();
++  api.login.mockReset();
++  api.logout.mockReset();
++  api.clearSession.mockReset();
++  vi.stubGlobal(
++    "fetch",
++    vi.fn(
++      async (url: string) =>
++        new Response(
++          JSON.stringify(
++            url.includes("registration")
++              ? { enabled: true, password_min_length: 12, password_max_bytes: 72 }
++              : { user: { username: "star_user" } },
++          ),
++          {
++            status: url.endsWith("register") ? 201 : 200,
++            headers: { "Content-Type": "application/json" },
++          },
++        ),
++    ),
++  );
++});
++describe("ordinary account authentication flow", () => {
++  test("uses the shared login form with portal authentication and a registration link", async () => {
++    const workspace = vi.spyOn(portalNavigation, "openWorkspace").mockImplementation(() => {});
++    api.login.mockResolvedValue({ user: { must_change_password: false } });
++    const { container } = renderFlow();
++    expect(
++      await screen.findByRole("link", { name: /Create an account|立即注册|Зарегистрироваться/i }),
++    ).toHaveAttribute("href", "/portal-register");
++    expect(container.textContent).toContain("星桥 StarBridge");
++    fireEvent.change(container.querySelector('input[autocomplete="username"]')!, {
++      target: { value: "star_user" },
++    });
++    fireEvent.change(container.querySelector('input[autocomplete="current-password"]')!, {
++      target: { value: "Signup-Password-123!" },
++    });
++    fireEvent.submit(container.querySelector("form")!);
++    await waitFor(() => expect(workspace).toHaveBeenCalledOnce());
++    expect(api.login).toHaveBeenCalledWith("star_user", "Signup-Password-123!", false);
++  });
++  test("registration validates confirmation then returns to login with username prefilled", async () => {
++    const { container } = renderFlow("/portal-register");
++    await waitFor(() => expect(container.querySelector("fieldset")).not.toBeDisabled());
++    fireEvent.change(container.querySelector('input[autocomplete="username"]')!, {
++      target: { value: "star_user" },
++    });
++    const passwords = container.querySelectorAll('input[autocomplete="new-password"]');
++    fireEvent.change(passwords[0], { target: { value: "Signup-Password-123!" } });
++    fireEvent.change(passwords[1], { target: { value: "Mismatch-Password-123!" } });
++    fireEvent.submit(container.querySelector("form")!);
++    expect(await screen.findByRole("alert")).toHaveTextContent(/do not match|不一致|не совпадают/i);
++    fireEvent.change(passwords[1], { target: { value: "Signup-Password-123!" } });
++    fireEvent.submit(container.querySelector("form")!);
++    await waitFor(() =>
++      expect(container.querySelector('input[autocomplete="current-password"]')).toBeInTheDocument(),
++    );
++    expect(container.querySelector('input[autocomplete="username"]')).toHaveValue("star_user");
++    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
++      "/v0/portal/auth/register",
++      expect.objectContaining({
++        body: JSON.stringify({
++          username: "star_user",
++          display_name: "",
++          password: "Signup-Password-123!",
++        }),
++      }),
++    );
++  });
++  test("sign-out waits for revocation then opens unified login even if the server is offline", async () => {
++    let finish!: () => void;
++    api.logout.mockImplementation(
++      () =>
++        new Promise<void>((resolve) => {
++          finish = resolve;
++        }),
++    );
++    const login = vi.spyOn(portalNavigation, "openLogin").mockImplementation(() => {});
++    const pending = portalNavigation.signOut();
++    expect(login).not.toHaveBeenCalled();
++    finish();
++    await pending;
++    expect(api.clearSession).toHaveBeenCalledOnce();
++    expect(login).toHaveBeenCalledOnce();
++    api.logout.mockRejectedValue(new Error("offline"));
++    await portalNavigation.signOut();
++    expect(login).toHaveBeenCalledTimes(2);
++  });
++});
+diff --git a/pages/login/modelShowcase.ts b/pages/login/modelShowcase.ts
+new file mode 100644
+index 0000000..ccfe3f9
+--- /dev/null
++++ b/pages/login/modelShowcase.ts
+@@ -0,0 +1,102 @@
++import { apiClient } from "@code-proxy/api-client";
++export interface ShowcaseModel {
++  name: string;
++  icon: string;
++}
++export interface ShowcaseSettings {
++  items: ShowcaseModel[];
++  available_icons: string[];
++  version: number;
++}
++export const showcaseSettingsApi = {
++  get: () => apiClient.get<ShowcaseSettings>("/portal-model-showcase"),
++  save: (items: ShowcaseModel[], version: number) =>
++    apiClient.put("/portal-model-showcase", { items, version }),
++};
++export async function fetchPublicShowcase(signal?: AbortSignal): Promise<ShowcaseModel[]> {
++  const response = await fetch("/v0/portal/model-showcase", {
++    credentials: "omit",
++    cache: "no-store",
++    signal,
++  });
++  if (!response.ok) throw new Error("Unable to load model showcase");
++  const data = await response.json();
++  if (!Array.isArray(data.items)) throw new Error("Invalid model showcase");
++  return data.items;
++}
++export function showcaseCopy(language = "zh-CN") {
++  if (language.startsWith("zh"))
++    return {
++      button: "看看支持哪些模型",
++      title: "支持的模型",
++      subtitle: "已接入上游",
++      loading: "正在加载…",
++      error: "暂时无法加载模型列表，请重试。",
++      empty: "模型列表暂未公布，请稍后再来看看。",
++      retry: "重试",
++      close: "关闭",
++      settings: "登录页模型展示",
++      settingsHint:
++        "选择登录弹窗展示的模型，支持修改名称和调整顺序。保存后对所有访客生效，不改变模型调用权限。",
++      add: "添加模型",
++      name: "展示名称",
++      icon: "品牌图标",
++      remove: "移除",
++      up: "上移",
++      down: "下移",
++      save: "保存展示列表",
++      saved: "展示列表已保存",
++      refresh: "重新加载",
++      invalid: "请填写 1–80 个字符的名称，名称不能重复，最多展示 50 项。",
++      limit: "最多展示 50 项。",
++    };
++  if (language.startsWith("ru"))
++    return {
++      button: "Какие модели доступны?",
++      title: "Поддерживаемые модели",
++      subtitle: "Подключённые провайдеры",
++      loading: "Загрузка…",
++      error: "Не удалось загрузить модели.",
++      empty: "Список моделей пока не опубликован.",
++      retry: "Повторить",
++      close: "Закрыть",
++      settings: "Модели на странице входа",
++      settingsHint:
++        "Выберите публичный список, названия и порядок. Список не меняет разрешения на вызов моделей.",
++      add: "Добавить модель",
++      name: "Название",
++      icon: "Значок",
++      remove: "Удалить",
++      up: "Выше",
++      down: "Ниже",
++      save: "Сохранить список",
++      saved: "Список сохранён",
++      refresh: "Обновить",
++      invalid: "Укажите уникальные названия длиной 1–80 символов, не более 50 моделей.",
++      limit: "Не более 50 моделей.",
++    };
++  return {
++    button: "See supported models",
++    title: "Supported models",
++    subtitle: "Connected providers",
++    loading: "Loading…",
++    error: "Could not load the model list. Try again.",
++    empty: "The model list has not been published yet.",
++    retry: "Retry",
++    close: "Close",
++    settings: "Login page model showcase",
++    settingsHint:
++      "Choose public models, edit their names and order. Saving updates the login dialog without changing model access permissions.",
++    add: "Add model",
++    name: "Display name",
++    icon: "Brand icon",
++    remove: "Remove",
++    up: "Move up",
++    down: "Move down",
++    save: "Save showcase",
++    saved: "Showcase saved",
++    refresh: "Reload",
++    invalid: "Use unique names of 1–80 characters, with at most 50 models.",
++    limit: "At most 50 models.",
++  };
++}
+diff --git a/pages/login/portalAuth.ts b/pages/login/portalAuth.ts
+new file mode 100644
+index 0000000..554a0d3
+--- /dev/null
++++ b/pages/login/portalAuth.ts
+@@ -0,0 +1,116 @@
++import { portalApi } from "@code-proxy/api-client";
++
++export const portalNavigation = {
++  openLogin: () => window.location.replace("/login"),
++  openWorkspace: () => window.location.replace("/manage/apikey-lookup"),
++  async signOut() {
++    try {
++      await portalApi.logout();
++    } catch {
++      /* Local sign-out must work if the server is unavailable. */
++    } finally {
++      portalApi.clearSession();
++      portalNavigation.openLogin();
++    }
++  },
++};
++
++export async function registrationCapabilities() {
++  const response = await fetch("/v0/portal/auth/registration", {
++    credentials: "omit",
++    cache: "no-store",
++    signal: AbortSignal.timeout(15000),
++  });
++  if (!response.ok) throw new Error("Registration unavailable");
++  return response.json() as Promise<{
++    enabled: boolean;
++    password_min_length: number;
++    password_max_bytes: number;
++  }>;
++}
++
++const copy = {
++  zh: {
++    description: "登录星桥，管理你的 API Key、模型用量和调用记录。",
++    remember: "记住登录状态",
++    noAccount: "还没有账号？",
++    register: "立即注册",
++    registered: "注册成功，请使用刚才设置的账号和密码登录。",
++    title: "创建账号",
++    username: "用户名",
++    nickname: "昵称（选填）",
++    password: "密码",
++    confirm: "确认密码",
++    usernameHint: "3–48 位字母、数字、点、下划线或短横线，以字母或数字开头。",
++    passwordHint: "至少 12 位，包含大写字母、小写字母和符号。",
++    haveAccount: "已有账号？",
++    login: "返回登录",
++    create: "创建账号",
++    creating: "正在创建…",
++    checking: "正在检查注册状态…",
++    closed: "暂未开放注册，请联系管理员。",
++    unavailable: "服务暂时不可用，请稍后重试。",
++    mismatch: "两次输入的密码不一致。",
++    taken: "用户名已被使用，请换一个。",
++    invalid: "请检查用户名和密码格式，昵称最多 128 字节。",
++    tooLong: "密码过长，最多允许 72 字节。",
++    throttled: "操作过于频繁，请稍后重试。",
++  },
++  en: {
++    description: "Sign in to StarBridge to manage API keys, model usage and request history.",
++    remember: "Remember me",
++    noAccount: "New to StarBridge?",
++    register: "Create an account",
++    registered: "Account created. Sign in with your new username and password.",
++    title: "Create account",
++    username: "Username",
++    nickname: "Display name (optional)",
++    password: "Password",
++    confirm: "Confirm password",
++    usernameHint:
++      "3–48 letters, numbers, dots, underscores or hyphens. Start with a letter or number.",
++    passwordHint: "At least 12 characters with uppercase, lowercase and a symbol.",
++    haveAccount: "Already have an account?",
++    login: "Back to sign in",
++    create: "Create account",
++    creating: "Creating…",
++    checking: "Checking registration…",
++    closed: "Registration is closed. Contact your administrator.",
++    unavailable: "Service unavailable. Please try again later.",
++    mismatch: "The passwords do not match.",
++    taken: "This username is taken.",
++    invalid: "Check your username and password. Display names may use up to 128 bytes.",
++    tooLong: "Your password exceeds 72 bytes.",
++    throttled: "Too many attempts. Try again later.",
++  },
++  ru: {
++    description: "Войдите в StarBridge для управления API-ключами и просмотра статистики.",
++    remember: "Запомнить меня",
++    noAccount: "Нет аккаунта?",
++    register: "Зарегистрироваться",
++    registered: "Аккаунт создан. Войдите с новым именем и паролем.",
++    title: "Создать аккаунт",
++    username: "Имя пользователя",
++    nickname: "Отображаемое имя (необязательно)",
++    password: "Пароль",
++    confirm: "Повторите пароль",
++    usernameHint:
++      "3–48 латинских букв, цифр, точек, подчёркиваний или дефисов. Начните с буквы или цифры.",
++    passwordHint: "Не менее 12 символов: заглавная и строчная буквы и специальный символ.",
++    haveAccount: "Уже есть аккаунт?",
++    login: "Вернуться ко входу",
++    create: "Создать аккаунт",
++    creating: "Создание…",
++    checking: "Проверка регистрации…",
++    closed: "Регистрация закрыта. Обратитесь к администратору.",
++    unavailable: "Сервис недоступен. Повторите позже.",
++    mismatch: "Пароли не совпадают.",
++    taken: "Это имя уже занято.",
++    invalid: "Проверьте имя и пароль. Отображаемое имя: до 128 байт.",
++    tooLong: "Пароль превышает 72 байта.",
++    throttled: "Слишком много попыток. Повторите позже.",
++  },
++};
++export function portalCopy(language = "zh-CN") {
++  return language.startsWith("zh") ? copy.zh : language.startsWith("ru") ? copy.ru : copy.en;
++}
+diff --git a/pages/login/route.tsx b/pages/login/route.tsx
+index 0855312..101ea68 100644
+--- a/pages/login/route.tsx
++++ b/pages/login/route.tsx
+@@ -12,3 +12,26 @@ export const loginRoute = {
+   nav: null,
+   preload: preloadLoginPage,
+ };
++
++const { Page: PortalLogin, preload: preloadPortalLogin } = preloadablePage(() =>
++  import("./LoginPage").then((m) => ({ default: m.PortalLoginPage })),
++);
++const { Page: PortalRegister, preload: preloadPortalRegister } = preloadablePage(() =>
++  import("./PortalRegisterPage").then((m) => ({ default: m.PortalRegisterPage })),
++);
++export const portalLoginRoute = {
++  path: "/portal-login",
++  element: <PortalLogin />,
++  auth: false,
++  layout: "none",
++  nav: null,
++  preload: preloadPortalLogin,
++};
++export const portalRegisterRoute = {
++  path: "/portal-register",
++  element: <PortalRegister />,
++  auth: false,
++  layout: "none",
++  nav: null,
++  preload: preloadPortalRegister,
++};
+diff --git a/pages/registry.ts b/pages/registry.ts
+index 12edc0a..d74761e 100644
+--- a/pages/registry.ts
++++ b/pages/registry.ts
+@@ -1,5 +1,5 @@
+ import type { ReactElement } from "react";
+-import { loginRoute } from "./login/route";
++import { loginRoute, portalLoginRoute, portalRegisterRoute } from "./login/route";
+ import { dashboardRoute } from "./dashboard/route";
+ import { monitorRoute } from "./monitor/route";
+ import { requestLogsRoute } from "./request-logs/route";
+@@ -49,6 +49,8 @@ export interface PageRoute {
+ 
+ export const pageRoutes: PageRoute[] = [
+   loginRoute,
++  portalLoginRoute,
++  portalRegisterRoute,
+   changePasswordRoute,
+   tenantsRoute,
+   usersRoute,

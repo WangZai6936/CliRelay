@@ -107,6 +107,12 @@ portal-registration:
   # Empty follows existing portal account defaults (unrestricted, zero = unlimited).
   permission-profile-id: ""
 
+# Public, ordered model names shown in the login-page dialog. Managed in the
+# console under System settings > Login page model showcase; empty by default.
+# This display list does not grant model access or enable upstream providers.
+portal-model-showcase: []
+# Example item: {name: "Claude", icon: "claude"}
+
 # Management API settings
 remote-management:
   # Whether to allow remote (non-localhost) management access.

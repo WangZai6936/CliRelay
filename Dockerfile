@@ -21,6 +21,10 @@ RUN git clone --depth=1 --branch "${FRONTEND_REF}" "${FRONTEND_REPOSITORY}" fron
     && git checkout --detach "${FRONTEND_COMMIT}"; \
   fi
 
+# Keep portal login, signup and sign-out in the original panel component system.
+COPY frontend-patches/ /patches/
+RUN git -C /src/frontend apply /patches/*.patch
+
 # ── Frontend build ───────────────────────────────────────────────────────────
 FROM --platform=$BUILDPLATFORM oven/bun:1 AS frontend-builder
 
